@@ -1,0 +1,22 @@
+name: askme
+description: AskMe offline document assistant starter application.
+publish_to: 'none'
+version: 0.1.0+1
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  file_picker: ^8.1.7
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  sqflite: ^2.4.1
+  crypto: ^3.0.6
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.4
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
