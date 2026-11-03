@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using UglyToad.PdfPig;
 using DocumentFormat.OpenXml.Packaging;
@@ -14,37 +15,66 @@ public sealed class LocalDocumentExtractor : IDocumentExtractor
     private const int Overlap = 160;
 
     public async IAsyncEnumerable<ExtractedChunk> ExtractAsync(
-        SelectedDocument document, Stream source,
+        SelectedDocument document,
+        Stream source,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(source);
         cancellationToken.ThrowIfCancellationRequested();
+
         var ext = Path.GetExtension(document.DisplayName).ToLowerInvariant();
+
+        if (ext == ".pdf")
+        {
+            using var pdf = PdfDocument.Open(source);
+            var chunkNumber = 0;
+
+            foreach (var page in pdf.GetPages())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var pageNumber = page.Number.ToString(
+                    CultureInfo.InvariantCulture);
+
+                foreach (var chunk in Split(page.Text))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    chunkNumber++;
+
+                    yield return new ExtractedChunk(
+                        document.DocumentId,
+                        chunkNumber,
+                        chunk,
+                        pageNumber);
+                }
+            }
+
+            yield break;
+        }
+
         string text;
-        if (ext == ".pdf") text = ReadPdf(source, cancellationToken);
-        else if (ext == ".docx") text = ReadDocx(source, cancellationToken);
-        else if (ext is ".txt" or ".md" or ".csv" or ".json") text = await ReadTextAsync(source, cancellationToken);
-        else throw new NotSupportedException("Supported formats: PDF, DOCX, TXT, MD, CSV, JSON.");
+
+        if (ext == ".docx")
+            text = ReadDocx(source, cancellationToken);
+        else if (ext is ".txt" or ".md" or ".csv" or ".json")
+            text = await ReadTextAsync(source, cancellationToken);
+        else
+            throw new NotSupportedException(
+                "Supported formats: PDF, DOCX, TXT, MD, CSV, JSON.");
 
         var chunks = Split(text);
+
         for (var i = 0; i < chunks.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            yield return new ExtractedChunk(document.DocumentId, i + 1, chunks[i], null);
-        }
-    }
 
-    private static string ReadPdf(Stream stream, CancellationToken ct)
-    {
-        using var pdf = PdfDocument.Open(stream);
-        var sb = new StringBuilder();
-        foreach (var page in pdf.GetPages())
-        {
-            ct.ThrowIfCancellationRequested();
-            sb.AppendLine(page.Text);
+            yield return new ExtractedChunk(
+                document.DocumentId,
+                i + 1,
+                chunks[i],
+                null);
         }
-        return sb.ToString();
     }
 
     private static string ReadDocx(Stream stream, CancellationToken ct)

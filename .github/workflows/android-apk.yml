@@ -1,0 +1,60 @@
+name: AskMe Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Test and Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run Backend Tests
+        run: dotnet test DotNetBackend/AskMe.Core.Tests/AskMe.Core.Tests.csproj
+
+      - name: Get Flutter Dependencies
+        working-directory: FlutterApp
+        run: flutter pub get
+
+      - name: Analyze Flutter
+        working-directory: FlutterApp
+        run: flutter analyze
+
+      - name: Run Flutter Tests
+        working-directory: FlutterApp
+        run: flutter test
+
+      - name: Build Android APK
+        working-directory: FlutterApp
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AskMe-Android-APK
+          path: FlutterApp/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
