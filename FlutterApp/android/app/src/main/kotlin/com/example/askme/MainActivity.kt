@@ -27,6 +27,7 @@ class MainActivity : FlutterActivity() {
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
     private var pendingSpeechResult: MethodChannel.Result? = null
+    private var pendingSpeechLanguage: String = "hi-IN"
     private val audioPermissionRequest = 7413
 
     override fun onDestroy() {\n        speechRecognizer?.destroy()\n        textToSpeech?.stop()\n        textToSpeech?.shutdown()\n        super.onDestroy()\n    }\n\n    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -116,6 +117,7 @@ class MainActivity : FlutterActivity() {
         }
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             pendingSpeechResult = result
+            pendingSpeechLanguage = language
             requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), audioPermissionRequest)
             return
         }
@@ -227,7 +229,7 @@ class MainActivity : FlutterActivity() {
         val callback = pendingSpeechResult ?: return
         pendingSpeechResult = null
         if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            beginOnDeviceRecognition("hi-IN", callback)
+            beginOnDeviceRecognition(pendingSpeechLanguage, callback)
         } else {
             callback.error("MIC_PERMISSION_DENIED", "Microphone permission was not granted.", null)
         }
