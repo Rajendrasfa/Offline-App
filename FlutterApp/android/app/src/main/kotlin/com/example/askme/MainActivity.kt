@@ -1,5 +1,8 @@
 package com.example.askme
 
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -40,6 +43,7 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "modelInfo" -> result.success(currentModelInfo())
+                    "deviceProfile" -> result.success(deviceProfile())
                     "removeModel" -> {
                         val dir = File(filesDir, "models")
                         val removed = !dir.exists() || dir.deleteRecursively()
@@ -99,6 +103,30 @@ class MainActivity : FlutterActivity() {
             "sha256" to digest.digest().joinToString("") { "%02x".format(it) },
             "validated" to false,
             "message" to "File imported. Runtime compatibility has not yet been verified."
+        )
+    }
+
+    private fun deviceProfile(): Map<String, Any> {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memory = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memory)
+        val ramGb = memory.totalMem / (1024.0 * 1024.0 * 1024.0)
+        val tier = when {
+            ramGb >= 8.0 -> "high"
+            ramGb >= 6.0 -> "standard"
+            ramGb >= 4.0 -> "compact"
+            else -> "minimum"
+        }
+        return mapOf(
+            "sdkInt" to Build.VERSION.SDK_INT,
+            "supportedAbis" to Build.SUPPORTED_ABIS.toList(),
+            "is64Bit" to (Build.VERSION.SDK_INT >= 23 && android.os.Process.is64Bit()),
+            "cpuCores" to Runtime.getRuntime().availableProcessors(),
+            "totalRamBytes" to memory.totalMem,
+            "availableRamBytes" to memory.availMem,
+            "lowMemory" to memory.lowMemory,
+            "deviceTier" to tier,
+            "modelRuntimeReady" to false
         )
     }
 
