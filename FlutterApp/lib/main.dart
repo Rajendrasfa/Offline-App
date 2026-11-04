@@ -33,7 +33,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   ImportedModelInfo? _modelInfo;
   bool _modelBusy = false;
   Map<dynamic, dynamic>? _deviceProfile;
-  final AskMeEngine _engine = OfflineEngineNotInstalled();
+  final AskMeEngine _engine = AndroidLlamaOfflineEngine();
   final List<AskMeHistoryItem> _records = [];
   AskMeDocument? _document;
   String _status = 'Loading encrypted history…';
