@@ -4,9 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
 
 class AskMeDocument {
-  const AskMeDocument({required this.name, required this.bytes});
+  const AskMeDocument({required this.name, required this.bytes, this.extractedText});
   final String name;
   final List<int> bytes;
+  final String? extractedText;
 }
 
 class AskMeAnswer {
@@ -76,7 +77,9 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
     required Future<void> cancelled,
   }) async {
     await _ensureLoaded();
-    final docText = document == null ? '' : utf8.decode(document.bytes, allowMalformed: true);
+    final docText = document == null
+        ? ''
+        : (document.extractedText ?? utf8.decode(document.bytes, allowMalformed: true));
     final prompt = StringBuffer()
       ..writeln('You are AskMe, a private offline assistant. Reply in the language used by the user.')
       ..writeln('Use only the supplied document when answering document questions. If the answer is absent, say so.')
