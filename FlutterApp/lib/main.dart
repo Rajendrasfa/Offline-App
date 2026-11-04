@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'services/askme_engine.dart';
 import 'services/request_cancellation.dart';
 import 'services/secure_history_store.dart';
+import 'services/offline_model_store.dart';
 
 void main() => runApp(const AskMeApp());
 
@@ -28,6 +29,9 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   final _question = TextEditingController();
   final _history = SecureHistoryStore();
   final _cancellation = RequestCancellation();
+  final _modelStore = OfflineModelStore();
+  ImportedModelInfo? _modelInfo;
+  bool _modelBusy = false;
   final AskMeEngine _engine = OfflineEngineNotInstalled();
   final List<AskMeHistoryItem> _records = [];
   AskMeDocument? _document;
@@ -36,7 +40,41 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   String? _activeRequestId;
 
   @override
-  void initState() { super.initState(); _loadHistory(); }
+  void initState() { super.initState(); _loadHistory(); _loadModelInfo(); }
+
+  Future<void> _loadModelInfo() async {
+    try {
+      final map = await _modelStore.getInfo();
+      if (!mounted) return;
+      setState(() => _modelInfo = map == null ? null : ImportedModelInfo.fromMap(map));
+    } catch (e) { if (mounted) _message('Model status unavailable: $e'); }
+  }
+
+  Future<void> _importModel() async {
+    if (_modelBusy || _busy) return;
+    setState(() { _modelBusy = true; _status = 'Selecting model…'; });
+    try {
+      final imported = await _modelStore.importModel();
+      if (!mounted) return;
+      if (imported == null) { setState(() => _status = 'Import cancelled'); return; }
+      setState(() => _modelInfo = imported);
+      _message('Model file imported. Runtime compatibility is NOT verified; AI answers remain disabled until runtime is installed.');
+    } on PlatformException catch (e) { _message('Model import failed (${e.code}): ${e.message ?? ''}'); }
+      catch (e) { _message('Model import failed: $e'); }
+    finally { if (mounted) setState(() { _modelBusy = false; _status = 'Offline mode'; }); }
+  }
+
+  Future<void> _removeModel() async {
+    if (_modelBusy || _busy) return;
+    setState(() => _modelBusy = true);
+    try {
+      final removed = await _modelStore.removeModel();
+      if (!mounted) return;
+      if (removed) { setState(() => _modelInfo = null); _message('Imported model removed from app storage.'); }
+      else { _message('Could not remove imported model.'); }
+    } catch (e) { _message('Remove failed: $e'); }
+    finally { if (mounted) setState(() => _modelBusy = false); }
+  }
 
   Future<void> _loadHistory() async {
     try {
@@ -130,6 +168,12 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
         Text('Local encrypted history • No cloud fallback', style: TextStyle(color: Colors.white)),
       ])),
       const SizedBox(height: 12),
+      Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [const Icon(Icons.memory), const SizedBox(width: 8), const Expanded(child: Text('Offline AI Model', style: TextStyle(fontWeight: FontWeight.bold))), Text(_modelInfo == null ? 'Not imported' : 'Imported', style: const TextStyle(fontSize: 12, color: Colors.blueGrey))]),
+        if (_modelInfo != null) ...[const SizedBox(height: 6), Text('${_modelInfo!.storedName} • ${(_modelInfo!.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB'), Text('SHA-256: ${_modelInfo!.sha256}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)), Text(_modelInfo!.message ?? 'Runtime compatibility not verified.', style: const TextStyle(fontSize: 11, color: Colors.deepOrange))],
+        const SizedBox(height: 8), Row(children: [Expanded(child: OutlinedButton.icon(onPressed: (_busy || _modelBusy) ? null : _importModel, icon: const Icon(Icons.file_open), label: Text(_modelBusy ? 'Please wait…' : (_modelInfo == null ? 'Import model' : 'Replace model')))), if (_modelInfo != null) ...[const SizedBox(width: 8), IconButton(tooltip: 'Remove model', onPressed: (_busy || _modelBusy) ? null : _removeModel, icon: const Icon(Icons.delete_outline))]])
+      ]))),
+      const SizedBox(height: 8),
       OutlinedButton.icon(onPressed: _busy ? null : _chooseFile, icon: const Icon(Icons.attach_file), label: Text(_document == null ? 'Select a document' : 'Change: ${_document!.name}')),
       const SizedBox(height: 8),
       Row(children: [const Expanded(child: Text('Conversation history', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17))), Text(_status, style: const TextStyle(fontSize: 11, color: Colors.blueGrey))]),
@@ -140,7 +184,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       const SizedBox(height: 8),
       Row(children: [Expanded(child: FilledButton.icon(onPressed: _busy ? null : _ask, icon: const Icon(Icons.send), label: const Text('Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _busy ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: const Text('Cancel')))]),
       const SizedBox(height: 6),
-      const Text('AI model and voice runtime integration is required before answers/voice can work. This app will not send questions or files to the internet.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
+      const Text('Model import stores the selected file only. Offline inference and offline Hindi/English speech engines are not yet connected; no cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
     ]))),
   );
 }
