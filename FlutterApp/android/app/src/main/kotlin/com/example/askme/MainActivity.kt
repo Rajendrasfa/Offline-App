@@ -2,14 +2,15 @@ package com.example.askme
 
 import android.app.ActivityManager
 import android.content.Context
-import android.os.Build
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.io.RandomAccessFile
 import java.security.MessageDigest
 
 class MainActivity : FlutterActivity() {
@@ -45,13 +46,12 @@ class MainActivity : FlutterActivity() {
                     "modelInfo" -> result.success(currentModelInfo())
                     "modelPath" -> {
                         val model = File(File(filesDir, "models"), "model.gguf")
-                        result.success(if (model.isFile) model.absolutePath else null)
+                        result.success(if (model.isFile && isGguf(model)) model.absolutePath else null)
                     }
                     "deviceProfile" -> result.success(deviceProfile())
                     "removeModel" -> {
                         val dir = File(filesDir, "models")
-                        val removed = !dir.exists() || dir.deleteRecursively()
-                        result.success(removed)
+                        result.success(!dir.exists() || dir.deleteRecursively())
                     }
                     else -> result.notImplemented()
                 }
@@ -69,11 +69,21 @@ class MainActivity : FlutterActivity() {
             return
         }
         try {
-            val uri = data.data!!
-            val info = importSelectedModel(uri)
-            callback.success(info)
+            callback.success(importSelectedModel(data.data!!))
         } catch (e: Exception) {
             callback.error("MODEL_IMPORT_FAILED", e.message ?: "Could not import selected model.", null)
+        }
+    }
+
+    // GGUF files begin with the ASCII magic "GGUF" followed by a little-endian
+    // version. This validates the container header, not model architecture.
+    private fun isGguf(file: File): Boolean {
+        if (!file.isFile || file.length() < 24L) return false
+        RandomAccessFile(file, "r").use { input ->
+            val magic = ByteArray(4)
+            input.readFully(magic)
+            val version = Integer.reverseBytes(input.readInt())
+            return magic.contentEquals(byteArrayOf(0x47, 0x47, 0x55, 0x46)) && version in 2..3
         }
     }
 
@@ -82,32 +92,45 @@ class MainActivity : FlutterActivity() {
         if (!dir.exists() && !dir.mkdirs()) error("Cannot create private model directory.")
         val temp = File(dir, "model.gguf.partial")
         val target = File(dir, "model.gguf")
+        val backup = File(dir, "model.gguf.previous")
         val digest = MessageDigest.getInstance("SHA-256")
         var total = 0L
         val maxBytes = 8L * 1024L * 1024L * 1024L
-        contentResolver.openInputStream(uri)?.use { input ->
-            temp.outputStream().buffered().use { output ->
-                val buffer = ByteArray(1024 * 1024)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    total += count
-                    require(total <= maxBytes) { "Model file exceeds the 8 GB import limit." }
-                    digest.update(buffer, 0, count)
-                    output.write(buffer, 0, count)
+        try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                temp.outputStream().buffered().use { output ->
+                    val buffer = ByteArray(1024 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= maxBytes) { "Model file exceeds the 8 GB import limit." }
+                        digest.update(buffer, 0, count)
+                        output.write(buffer, 0, count)
+                    }
                 }
+            } ?: error("Selected file cannot be opened.")
+            require(isGguf(temp)) { "Selected file is not a supported GGUF v2/v3 model." }
+            if (backup.exists()) backup.delete()
+            if (target.exists()) require(target.renameTo(backup)) { "Could not preserve the previous model." }
+            if (!temp.renameTo(target)) {
+                if (backup.exists()) backup.renameTo(target)
+                error("Could not finalize imported model.")
             }
-        } ?: error("Selected file cannot be opened.")
-        require(total >= 1024L * 1024L) { "Selected file is too small to be a model." }
-        require(temp.renameTo(target)) { "Could not finalize imported model." }
-        return mapOf(
-            "fileName" to (uri.lastPathSegment ?: "model.gguf"),
-            "storedName" to target.name,
-            "sizeBytes" to total,
-            "sha256" to digest.digest().joinToString("") { "%02x".format(it) },
-            "validated" to false,
-            "message" to "File imported. Runtime compatibility has not yet been verified."
-        )
+            backup.delete()
+            return mapOf(
+                "fileName" to (uri.lastPathSegment ?: "model.gguf"),
+                "storedName" to target.name,
+                "sizeBytes" to total,
+                "sha256" to digest.digest().joinToString("") { "%02x".format(it) },
+                "validated" to false,
+                "message" to "GGUF header validated; runtime architecture and device compatibility are checked when loaded."
+            )
+        } catch (e: Exception) {
+            temp.delete()
+            if (!target.exists() && backup.exists()) backup.renameTo(target)
+            throw e
+        }
     }
 
     private fun deviceProfile(): Map<String, Any> {
@@ -137,7 +160,10 @@ class MainActivity : FlutterActivity() {
     private fun currentModelInfo(): Map<String, Any>? {
         val model = File(File(filesDir, "models"), "model.gguf")
         if (!model.exists()) return null
+        val valid = isGguf(model)
         return mapOf("storedName" to model.name, "sizeBytes" to model.length(),
-            "validated" to false, "message" to "Imported file; runtime validation pending.")
+            "validated" to valid, "message" to if (valid)
+                "GGUF header valid; runtime compatibility is checked when loaded."
+            else "Imported file is invalid or incomplete.")
     }
 }
