@@ -19,8 +19,6 @@ class LocalSelectedDocumentExtractor {
     if (bytes.length > _maxBytes) {
       throw const FormatException('Documents larger than 25 MB are not supported.');
     }
-    _throwIfAlreadyCancelled(cancelled);
-
     final extension = p.extension(fileName).toLowerCase();
     if (!const {'.pdf', '.docx', '.txt', '.md', '.csv', '.json'}.contains(extension)) {
       throw const FormatException('Supported formats: PDF, DOCX, TXT, MD, CSV and JSON.');
@@ -43,7 +41,6 @@ class LocalSelectedDocumentExtractor {
         parse,
         cancelled.then<String>((_) => throw const DocumentExtractionCancelled()),
       ]);
-      _throwIfAlreadyCancelled(cancelled);
       final normalized = text.replaceAll('\u0000', '').trim();
       if (normalized.isEmpty) {
         throw const FormatException(
@@ -67,11 +64,6 @@ class LocalSelectedDocumentExtractor {
     }
     final result = await TextExtractor().extractText(file.path, isUrl: false);
     return (result['text'] as String?) ?? '';
-  }
-
-  void _throwIfAlreadyCancelled(Future<void> cancelled) {
-    // A completed cancellation future is delivered in the next microtask.
-    // Callers also own the request lease and discard results after cancellation.
   }
 }
 
