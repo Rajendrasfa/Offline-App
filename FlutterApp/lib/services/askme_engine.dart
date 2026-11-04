@@ -76,10 +76,6 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
     required Future<void> cancelled,
   }) async {
     await _ensureLoaded();
-    if (cancelled is Future<void>) {
-      // A cancelled request must not begin a fresh generation.
-      // Future.any below also stops an active native generation.
-    }
     final docText = document == null ? '' : utf8.decode(document.bytes, allowMalformed: true);
     final prompt = StringBuffer()
       ..writeln('You are AskMe, a private offline assistant. Reply in the language used by the user.')
@@ -119,9 +115,6 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
     });
     try {
       await done.future;
-      if (cancelled is Future<void>) {
-        // Caller checks its request lease before persisting the response.
-      }
       final answer = output.toString().trim();
       if (answer.isEmpty) throw StateError('The local model returned an empty response.');
       return AskMeAnswer(text: answer);
