@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/offline-ai-voice
   workflow_dispatch:
 
 jobs:
