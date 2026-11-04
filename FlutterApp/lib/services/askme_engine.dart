@@ -108,13 +108,19 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
       cancelOnError: true,
     );
 
+    var cancellationRequested = false;
     final cancelSub = cancelled.asStream().listen((_) async {
+      cancellationRequested = true;
+      // Stop the native llama.cpp generation before allowing the request to
+      // settle. The caller's request lease prevents a cancelled result from
+      // being written to history even if native shutdown takes a moment.
       await _controller.stop();
       await _generation?.cancel();
       if (!done.isCompleted) done.complete();
     });
     try {
       await done.future;
+      if (cancellationRequested) throw const OfflineRequestCancelled();
       final answer = output.toString().trim();
       if (answer.isEmpty) throw StateError('The local model returned an empty response.');
       return AskMeAnswer(text: answer);
