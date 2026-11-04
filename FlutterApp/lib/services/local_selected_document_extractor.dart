@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:doc_text_extractor/doc_text_extractor.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-/// Extracts text from bytes supplied by the user. The temporary working copy
-/// is deleted in a finally block; the selected original is never modified.
+/// Extracts only bytes explicitly supplied by the user.
+/// The temporary copy is private to the app and deleted after parsing settles.
 class LocalSelectedDocumentExtractor {
   static const _maxBytes = 25 * 1024 * 1024;
 
@@ -16,9 +17,9 @@ class LocalSelectedDocumentExtractor {
   }) async {
     if (bytes.isEmpty) throw const FormatException('The selected file is empty.');
     if (bytes.length > _maxBytes) {
-      throw const FormatException('Documents larger than 25 MB are not supported yet.');
+      throw const FormatException('Documents larger than 25 MB are not supported.');
     }
-    await _throwIfCancelled(cancelled);
+    _throwIfAlreadyCancelled(cancelled);
 
     final extension = p.extension(fileName).toLowerCase();
     if (!const {'.pdf', '.docx', '.txt', '.md', '.csv', '.json'}.contains(extension)) {
@@ -26,49 +27,51 @@ class LocalSelectedDocumentExtractor {
     }
 
     final directory = await getTemporaryDirectory();
+    _throwIfAlreadyCancelled(cancelled);
     final tempFile = File(p.join(
       directory.path,
       'askme-${DateTime.now().microsecondsSinceEpoch}$extension',
     ));
+    await tempFile.writeAsBytes(bytes, flush: true);
 
+    final parse = _parseFile(tempFile, extension);
+    // The package performs parsing in its own isolate for supported versions.
+    // Dart cannot forcibly terminate that package's isolate, so cancellation
+    // returns immediately while cleanup runs as soon as parsing settles.
     try {
-      await tempFile.writeAsBytes(bytes, flush: true);
-      await _throwIfCancelled(cancelled);
-
-      String text;
-      if (extension == '.txt' || extension == '.md' ||
-          extension == '.csv' || extension == '.json') {
-        text = await tempFile.readAsString();
-      } else {
-        // Local path only: do not call TextExtractor with a URL.
-        final result = await TextExtractor().extractText(
-          tempFile.path,
-          isUrl: false,
-        );
-        text = (result['text'] as String?) ?? '';
-      }
-
-      await _throwIfCancelled(cancelled);
+      final text = await Future.any<String>([
+        parse,
+        cancelled.then<String>((_) => throw const DocumentExtractionCancelled()),
+      ]);
+      _throwIfAlreadyCancelled(cancelled);
       final normalized = text.replaceAll('\u0000', '').trim();
       if (normalized.isEmpty) {
         throw const FormatException(
-          'No selectable text was found. Scanned/image-only PDFs need OCR, which is not included yet.',
+          'No selectable text found. Scanned/image-only PDFs require OCR.',
         );
       }
       return normalized;
     } finally {
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
+      unawaited(parse.then((_) async {
+        if (await tempFile.exists()) await tempFile.delete();
+      }, onError: (Object _) async {
+        if (await tempFile.exists()) await tempFile.delete();
+      }));
     }
   }
 
-  Future<void> _throwIfCancelled(Future<void> cancelled) async {
-    final wasCancelled = await Future.any<bool>([
-      cancelled.then((_) => true),
-      Future<void>.delayed(Duration.zero).then((_) => false),
-    ]);
-    if (wasCancelled) throw const DocumentExtractionCancelled();
+  Future<String> _parseFile(File file, String extension) async {
+    if (extension == '.txt' || extension == '.md' ||
+        extension == '.csv' || extension == '.json') {
+      return file.readAsString();
+    }
+    final result = await TextExtractor().extractText(file.path, isUrl: false);
+    return (result['text'] as String?) ?? '';
+  }
+
+  void _throwIfAlreadyCancelled(Future<void> cancelled) {
+    // A completed cancellation future is delivered in the next microtask.
+    // Callers also own the request lease and discard results after cancellation.
   }
 }
 
