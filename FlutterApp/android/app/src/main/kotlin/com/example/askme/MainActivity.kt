@@ -30,7 +30,14 @@ class MainActivity : FlutterActivity() {
     private var pendingSpeechLanguage: String = "hi-IN"
     private val audioPermissionRequest = 7413
 
-    override fun onDestroy() {\n        speechRecognizer?.destroy()\n        textToSpeech?.stop()\n        textToSpeech?.shutdown()\n        super.onDestroy()\n    }\n\n    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+    override fun onDestroy() {
+        speechRecognizer?.destroy()
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        super.onDestroy()
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
