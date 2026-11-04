@@ -40,6 +40,8 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   AskMeDocument? _document;
   String _status = 'Loading encrypted history…';
   bool _busy = false;
+  bool _documentBusy = false;
+  Completer<void>? _documentCancel;
   String? _activeRequestId;
 
   @override
@@ -96,6 +98,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   }
 
   Future<void> _chooseFile() async {
+    if (_documentBusy || _busy) return;
     try {
       final result = await FilePicker.platform.pickFiles(type: FileType.custom,
         allowedExtensions: ['pdf', 'docx', 'txt', 'md', 'csv', 'json'],
@@ -104,29 +107,32 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       final file = result.files.single;
       final bytes = file.bytes;
       if (bytes == null) throw StateError('Selected file bytes are unavailable.');
-      setState(() => _status = 'Extracting selected document locally…');
+      final cancellation = Completer<void>();
+      _documentCancel = cancellation;
+      setState(() { _documentBusy = true; _status = 'Extracting selected document locally…'; });
       final extractedText = await _documentExtractor.extract(
         fileName: file.name,
         bytes: bytes,
-        cancelled: Future<void>.value(),
+        cancelled: cancellation.future,
       );
-      if (!mounted) return;
+      if (!mounted || cancellation.isCompleted) return;
       setState(() {
-        _document = AskMeDocument(
-          name: file.name,
-          bytes: bytes,
-          extractedText: extractedText,
-        );
+        _document = AskMeDocument(name: file.name, bytes: bytes, extractedText: extractedText);
         _status = 'Offline mode';
       });
-      _message('Document text extracted locally. Temporary working copy was deleted.');
+      _message('Document text extracted locally.');
+    } on DocumentExtractionCancelled {
+      if (mounted) _message('Document extraction cancelled.');
     } catch (e) {
-      if (mounted) setState(() => _status = 'Offline mode');
-      _message('Could not read selected document: $e');
+      if (mounted) _message('Could not read selected document: $e');
+    } finally {
+      _documentCancel = null;
+      if (mounted) setState(() { _documentBusy = false; _status = 'Offline mode'; });
     }
   }
 
   Future<void> _ask() async {
+    if (_documentBusy) return;
     final text = _question.text.trim();
     if (text.isEmpty) return;
     await _cancel(showMessage: false);
@@ -158,6 +164,12 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   }
 
   Future<void> _cancel({bool showMessage = true}) async {
+    if (_documentBusy && _activeRequestId == null) {
+      final signal = _documentCancel;
+      if (signal != null && !signal.isCompleted) signal.complete();
+      if (mounted) setState(() => _status = 'Cancelling document extraction…');
+      return;
+    }
     final id = _activeRequestId;
     if (id == null) return;
     _cancellation.cancelActive();
@@ -205,7 +217,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
         const SizedBox(height: 8), Row(children: [Expanded(child: OutlinedButton.icon(onPressed: (_busy || _modelBusy) ? null : _importModel, icon: const Icon(Icons.file_open), label: Text(_modelBusy ? 'Please wait…' : (_modelInfo == null ? 'Import model' : 'Replace model')))), if (_modelInfo != null) ...[const SizedBox(width: 8), IconButton(tooltip: 'Remove model', onPressed: (_busy || _modelBusy) ? null : _removeModel, icon: const Icon(Icons.delete_outline))]])
       ]))),
       const SizedBox(height: 8),
-      OutlinedButton.icon(onPressed: _busy ? null : _chooseFile, icon: const Icon(Icons.attach_file), label: Text(_document == null ? 'Select a document' : 'Change: ${_document!.name}')),
+      OutlinedButton.icon(onPressed: (_busy || _documentBusy) ? null : _chooseFile, icon: const Icon(Icons.attach_file), label: Text(_document == null ? 'Select a document' : 'Change: ${_document!.name}')),
       const SizedBox(height: 8),
       Row(children: [const Expanded(child: Text('Conversation history', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17))), Text(_status, style: const TextStyle(fontSize: 11, color: Colors.blueGrey))]),
       const SizedBox(height: 8),
@@ -213,7 +225,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       const SizedBox(height: 10),
       TextField(controller: _question, minLines: 1, maxLines: 4, onSubmitted: (_) => _ask(), decoration: const InputDecoration(hintText: 'Type your question… / अपना प्रश्न लिखें', border: OutlineInputBorder(), prefixIcon: Icon(Icons.edit))),
       const SizedBox(height: 8),
-      Row(children: [Expanded(child: FilledButton.icon(onPressed: _busy ? null : _ask, icon: const Icon(Icons.send), label: const Text('Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _busy ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: const Text('Cancel')))]),
+      Row(children: [Expanded(child: FilledButton.icon(onPressed: (_busy || _documentBusy) ? null : _ask, icon: const Icon(Icons.send), label: Text(_documentBusy ? 'Reading document…' : 'Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: (_busy || _documentBusy) ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: Text(_documentBusy ? 'Cancel reading' : 'Cancel')))]),
       const SizedBox(height: 6),
       const Text('PDF/DOCX/TXT/MD/CSV/JSON text is extracted locally from the selected file. Scanned PDFs need OCR. Hindi/English offline speech and the C# Android bridge are not integrated yet; no cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
     ]))),
