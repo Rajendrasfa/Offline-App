@@ -1,5 +1,5 @@
 name: askme
-description: AskMe offline document assistant starter application.
+description: AskMe offline document assistant.
 publish_to: 'none'
 version: 0.1.0+1
 environment:
@@ -14,6 +14,7 @@ dependencies:
   crypto: ^3.0.6
   cryptography: ^2.7.0
   flutter_secure_storage: ^9.2.4
+  llama_flutter_android: ^0.2.6
 dev_dependencies:
   flutter_test:
     sdk: flutter
