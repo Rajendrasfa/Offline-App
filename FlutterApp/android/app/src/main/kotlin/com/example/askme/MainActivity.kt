@@ -43,6 +43,10 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "modelInfo" -> result.success(currentModelInfo())
+                    "modelPath" -> {
+                        val model = File(File(filesDir, "models"), "model.gguf")
+                        result.success(if (model.isFile) model.absolutePath else null)
+                    }
                     "deviceProfile" -> result.success(deviceProfile())
                     "removeModel" -> {
                         val dir = File(filesDir, "models")
