@@ -32,6 +32,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   final _modelStore = OfflineModelStore();
   ImportedModelInfo? _modelInfo;
   bool _modelBusy = false;
+  Map<dynamic, dynamic>? _deviceProfile;
   final AskMeEngine _engine = OfflineEngineNotInstalled();
   final List<AskMeHistoryItem> _records = [];
   AskMeDocument? _document;
@@ -43,6 +44,11 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   void initState() { super.initState(); _loadHistory(); _loadModelInfo(); }
 
   Future<void> _loadModelInfo() async {
+    try {
+      final profile = await const MethodChannel('askme/offline_model').invokeMethod<Map<dynamic, dynamic>>('deviceProfile');
+      if (mounted) setState(() => _deviceProfile = profile);
+    } catch (_) {}
+
     try {
       final map = await _modelStore.getInfo();
       if (!mounted) return;
@@ -170,6 +176,11 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       const SizedBox(height: 12),
       Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [const Icon(Icons.memory), const SizedBox(width: 8), const Expanded(child: Text('Offline AI Model', style: TextStyle(fontWeight: FontWeight.bold))), Text(_modelInfo == null ? 'Not imported' : 'Imported', style: const TextStyle(fontSize: 12, color: Colors.blueGrey))]),
+        if (_deviceProfile != null) ...[
+          const SizedBox(height: 4),
+          Text("Device profile: ${_deviceProfile!['deviceTier']} • ${_deviceProfile!['cpuCores']} CPU cores • ${((_deviceProfile!['totalRamBytes'] as num) / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB RAM", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+          Text("Supported CPU: ${(_deviceProfile!['supportedAbis'] as List).join(', ')}", style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
+        ],
         if (_modelInfo != null) ...[const SizedBox(height: 6), Text('${_modelInfo!.storedName} • ${(_modelInfo!.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB'), Text('SHA-256: ${_modelInfo!.sha256}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)), Text(_modelInfo!.message ?? 'Runtime compatibility not verified.', style: const TextStyle(fontSize: 11, color: Colors.deepOrange))],
         const SizedBox(height: 8), Row(children: [Expanded(child: OutlinedButton.icon(onPressed: (_busy || _modelBusy) ? null : _importModel, icon: const Icon(Icons.file_open), label: Text(_modelBusy ? 'Please wait…' : (_modelInfo == null ? 'Import model' : 'Replace model')))), if (_modelInfo != null) ...[const SizedBox(width: 8), IconButton(tooltip: 'Remove model', onPressed: (_busy || _modelBusy) ? null : _removeModel, icon: const Icon(Icons.delete_outline))]])
       ]))),
