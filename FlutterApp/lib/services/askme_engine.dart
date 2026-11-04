@@ -150,6 +150,14 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
   }
 }
 
+/// Raised when the active request is cancelled while native inference is running.
+class OfflineRequestCancelled implements Exception {
+  const OfflineRequestCancelled();
+
+  @override
+  String toString() => 'OFFLINE_REQUEST_CANCELLED';
+}
+
 class OfflineEngineUnavailable implements Exception {
   const OfflineEngineUnavailable([this.message = 'OFFLINE_MODEL_NOT_INSTALLED']);
   final String message;
