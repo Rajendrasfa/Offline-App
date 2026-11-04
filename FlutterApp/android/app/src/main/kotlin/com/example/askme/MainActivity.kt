@@ -6,6 +6,12 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import java.util.Locale
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,12 +23,35 @@ class MainActivity : FlutterActivity() {
     private val channelName = "askme/offline_model"
     private val pickModelRequest = 7412
     private var pendingResult: MethodChannel.Result? = null
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var textToSpeech: TextToSpeech? = null
+    private var ttsReady = false
+    private var pendingSpeechResult: MethodChannel.Result? = null
+    private val audioPermissionRequest = 7413
 
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+    override fun onDestroy() {\n        speechRecognizer?.destroy()\n        textToSpeech?.stop()\n        textToSpeech?.shutdown()\n        super.onDestroy()\n    }\n\n    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "startOfflineSpeech" -> startOfflineSpeech(call.argument<String>("language") ?: "hi-IN", result)
+                    "stopOfflineSpeech" -> {
+                        speechRecognizer?.cancel()
+                        speechRecognizer?.destroy()
+                        speechRecognizer = null
+                        pendingSpeechResult?.error("SPEECH_CANCELLED", "Speech input was cancelled.", null)
+                        pendingSpeechResult = null
+                        result.success(true)
+                    }
+                    "speakOffline" -> speakOffline(
+                        call.argument<String>("text") ?: "",
+                        call.argument<String>("language") ?: "hi-IN",
+                        result
+                    )
+                    "stopSpeaking" -> {
+                        textToSpeech?.stop()
+                        result.success(true)
+                    }
                     "importModel" -> {
                         if (pendingResult != null) {
                             result.error("IMPORT_BUSY", "A model import is already in progress.", null)
@@ -72,6 +101,135 @@ class MainActivity : FlutterActivity() {
             callback.success(importSelectedModel(data.data!!))
         } catch (e: Exception) {
             callback.error("MODEL_IMPORT_FAILED", e.message ?: "Could not import selected model.", null)
+        }
+    }
+
+
+    private fun startOfflineSpeech(language: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            result.error("ON_DEVICE_SPEECH_UNAVAILABLE", "On-device speech recognition requires Android 12 or later.", null)
+            return
+        }
+        if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
+            result.error("ON_DEVICE_SPEECH_UNAVAILABLE", "No installed on-device speech recognition service is available.", null)
+            return
+        }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            pendingSpeechResult = result
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), audioPermissionRequest)
+            return
+        }
+        beginOnDeviceRecognition(language, result)
+    }
+
+    private fun beginOnDeviceRecognition(language: String, result: MethodChannel.Result) {
+        try {
+            speechRecognizer?.destroy()
+            val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+            speechRecognizer = recognizer
+            pendingSpeechResult = result
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onError(error: Int) {
+                    pendingSpeechResult?.error("SPEECH_RECOGNITION_FAILED", "On-device recognizer error: $error", null)
+                    pendingSpeechResult = null
+                    recognizer.destroy()
+                    speechRecognizer = null
+                }
+                override fun onResults(results: Bundle?) {
+                    val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                    pendingSpeechResult?.success(text)
+                    pendingSpeechResult = null
+                    recognizer.destroy()
+                    speechRecognizer = null
+                }
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            recognizer.startListening(intent)
+        } catch (e: Exception) {
+            pendingSpeechResult = null
+            speechRecognizer?.destroy()
+            speechRecognizer = null
+            result.error("SPEECH_START_FAILED", e.message, null)
+        }
+    }
+
+    private fun speakOffline(text: String, language: String, result: MethodChannel.Result) {
+        if (text.isBlank()) {
+            result.error("EMPTY_SPEECH_TEXT", "Text to speak is empty.", null)
+            return
+        }
+        val locale = Locale.forLanguageTag(language)
+        if (textToSpeech == null) {
+            textToSpeech = TextToSpeech(this) { status ->
+                ttsReady = status == TextToSpeech.SUCCESS
+                if (!ttsReady) {
+                    result.error("TTS_INIT_FAILED", "Android text-to-speech could not initialize.", null)
+                } else {
+                    speakWithOfflineVoice(text, locale, result)
+                }
+            }
+        } else if (ttsReady) {
+            speakWithOfflineVoice(text, locale, result)
+        } else {
+            result.error("TTS_NOT_READY", "Text-to-speech is still initializing. Try again.", null)
+        }
+    }
+
+    private fun speakWithOfflineVoice(text: String, locale: Locale, result: MethodChannel.Result) {
+        val engine = textToSpeech ?: run {
+            result.error("TTS_NOT_READY", "Text-to-speech is unavailable.", null)
+            return
+        }
+        val voice = engine.voices?.firstOrNull {
+            it.locale.language == locale.language && !it.isNetworkConnectionRequired
+        }
+        if (voice == null) {
+            result.error("OFFLINE_VOICE_UNAVAILABLE", "No offline voice is installed for ${locale.toLanguageTag()}.", null)
+            return
+        }
+        engine.voice = voice
+        val languageResult = engine.setLanguage(locale)
+        if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+            result.error("OFFLINE_VOICE_UNAVAILABLE", "The requested offline language voice is not supported.", null)
+            return
+        }
+        val utteranceId = "askme-${System.currentTimeMillis()}"
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String?) {}
+            override fun onDone(id: String?) {
+                if (id == utteranceId) runOnUiThread { result.success(true) }
+            }
+            @Deprecated("Deprecated in Android API")
+            override fun onError(id: String?) {
+                if (id == utteranceId) runOnUiThread { result.error("TTS_FAILED", "Offline speech playback failed.", null) }
+            }
+        })
+        if (engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) == TextToSpeech.ERROR) {
+            result.error("TTS_FAILED", "Could not start offline speech.", null)
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != audioPermissionRequest) return
+        val callback = pendingSpeechResult ?: return
+        pendingSpeechResult = null
+        if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            beginOnDeviceRecognition("hi-IN", callback)
+        } else {
+            callback.error("MIC_PERMISSION_DENIED", "Microphone permission was not granted.", null)
         }
     }
 
