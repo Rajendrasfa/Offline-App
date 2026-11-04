@@ -193,6 +193,12 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   }
 
   Future<void> _cancel({bool showMessage = true}) async {
+    if (_listening && _activeRequestId == null) {
+      await _speech.stopListening();
+      if (mounted) setState(() { _listening = false; _status = 'Offline mode'; });
+      if (showMessage) _message('Voice input cancelled.');
+      return;
+    }
     if (_documentBusy && _activeRequestId == null) {
       final signal = _documentCancel;
       if (signal != null && !signal.isCompleted) signal.complete();
@@ -224,7 +230,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   void _message(String value) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value))); }
 
   @override
-  void dispose() { _cancellation.cancelActive(); _engine.stopAudio(); _engine.dispose(); _question.dispose(); super.dispose(); }
+  void dispose() { _cancellation.cancelActive(); _speech.stopListening(); _speech.stopSpeaking(); _engine.stopAudio(); _engine.dispose(); _question.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -256,7 +262,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       const SizedBox(height: 10),
       TextField(controller: _question, minLines: 1, maxLines: 4, onSubmitted: (_) => _ask(), decoration: const InputDecoration(hintText: 'Type your question… / अपना प्रश्न लिखें', border: OutlineInputBorder(), prefixIcon: Icon(Icons.edit))),
       const SizedBox(height: 8),
-      Row(children: [IconButton(tooltip: 'Hindi voice input offline', onPressed: (_busy || _documentBusy || _listening) ? null : () => _listen('hi-IN'), icon: const Icon(Icons.mic)), IconButton(tooltip: 'English voice input offline', onPressed: (_busy || _documentBusy || _listening) ? null : () => _listen('en-US'), icon: const Icon(Icons.mic_none)), Expanded(child: FilledButton.icon(onPressed: (_busy || _documentBusy) ? null : _ask, icon: const Icon(Icons.send), label: Text(_documentBusy ? 'Reading document…' : 'Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: (_busy || _documentBusy || _listening) ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: Text(_documentBusy ? 'Cancel reading' : 'Cancel')))]),
+      Row(children: [IconButton(tooltip: 'Hindi voice input offline', onPressed: (_busy || _documentBusy || _listening) ? null : () => _listen('hi-IN'), icon: const Icon(Icons.mic)), IconButton(tooltip: 'English voice input offline', onPressed: (_busy || _documentBusy || _listening) ? null : () => _listen('en-US'), icon: const Icon(Icons.mic_none)), Expanded(child: FilledButton.icon(onPressed: (_busy || _documentBusy || _listening) ? null : _ask, icon: const Icon(Icons.send), label: Text(_documentBusy ? 'Reading document…' : 'Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: (_busy || _documentBusy || _listening) ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: Text(_documentBusy ? 'Cancel reading' : 'Cancel')))]),
       const SizedBox(height: 6),
       const Text('PDF/DOCX/TXT/MD/CSV/JSON text is extracted locally from the selected file. Scanned PDFs need OCR. Hindi/English voice input and offline system TTS use local device language services when installed. No cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
     ]))),
