@@ -6,6 +6,7 @@ import 'services/askme_engine.dart';
 import 'services/request_cancellation.dart';
 import 'services/secure_history_store.dart';
 import 'services/offline_model_store.dart';
+import 'services/local_selected_document_extractor.dart';
 
 void main() => runApp(const AskMeApp());
 
@@ -30,6 +31,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   final _history = SecureHistoryStore();
   final _cancellation = RequestCancellation();
   final _modelStore = OfflineModelStore();
+  final _documentExtractor = LocalSelectedDocumentExtractor();
   ImportedModelInfo? _modelInfo;
   bool _modelBusy = false;
   Map<dynamic, dynamic>? _deviceProfile;
@@ -100,10 +102,28 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
         allowMultiple: false, withData: true);
       if (!mounted || result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      if (file.bytes == null) throw StateError('Selected file bytes are unavailable.');
-      setState(() => _document = AskMeDocument(name: file.name, bytes: file.bytes!));
-      _message('Selected file is held in memory for this session only.');
-    } catch (e) { _message('Could not open file: $e'); }
+      final bytes = file.bytes;
+      if (bytes == null) throw StateError('Selected file bytes are unavailable.');
+      setState(() => _status = 'Extracting selected document locally…');
+      final extractedText = await _documentExtractor.extract(
+        fileName: file.name,
+        bytes: bytes,
+        cancelled: Future<void>.value(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _document = AskMeDocument(
+          name: file.name,
+          bytes: bytes,
+          extractedText: extractedText,
+        );
+        _status = 'Offline mode';
+      });
+      _message('Document text extracted locally. Temporary working copy was deleted.');
+    } catch (e) {
+      if (mounted) setState(() => _status = 'Offline mode');
+      _message('Could not read selected document: $e');
+    }
   }
 
   Future<void> _ask() async {
