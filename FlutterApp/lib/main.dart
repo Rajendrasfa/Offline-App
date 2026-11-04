@@ -215,7 +215,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       const SizedBox(height: 8),
       Row(children: [Expanded(child: FilledButton.icon(onPressed: _busy ? null : _ask, icon: const Icon(Icons.send), label: const Text('Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _busy ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: const Text('Cancel')))]),
       const SizedBox(height: 6),
-      const Text('Offline GGUF inference uses the on-device runtime on supported Android devices. Offline Hindi/English speech and PDF/DOCX extraction are still pending; no cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
+      const Text('PDF/DOCX/TXT/MD/CSV/JSON text is extracted locally from the selected file. Scanned PDFs need OCR. Hindi/English offline speech and the C# Android bridge are not integrated yet; no cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
     ]))),
   );
 }
