@@ -31,9 +31,12 @@ class MainActivity : FlutterActivity() {
     private val audioPermissionRequest = 7413
 
     override fun onDestroy() {
+        pendingSpeechResult?.error("ACTIVITY_DESTROYED", "Speech activity was closed.", null)
+        pendingSpeechResult = null
         speechRecognizer?.destroy()
         textToSpeech?.stop()
         textToSpeech?.shutdown()
+        textToSpeech = null
         super.onDestroy()
     }
 
