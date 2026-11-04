@@ -57,7 +57,7 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
       final context = totalRam >= 6 * 1024 * 1024 * 1024 ? 4096 : 2048;
       await _controller.loadModel(
         modelPath: modelPath,
-        threads: cores.clamp(2, 6),
+        threads: cores.clamp(2, 6).toInt(),
         contextSize: context,
       );
       _loaded = true;
