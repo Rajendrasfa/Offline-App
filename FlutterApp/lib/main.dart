@@ -43,13 +43,6 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   @override
   void initState() { super.initState(); _loadHistory(); _loadModelInfo(); }
 
-  @override
-  void dispose() {
-    _engine.dispose();
-    _question.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadModelInfo() async {
     try {
       final profile = await const MethodChannel('askme/offline_model').invokeMethod<Map<dynamic, dynamic>>('deviceProfile');
