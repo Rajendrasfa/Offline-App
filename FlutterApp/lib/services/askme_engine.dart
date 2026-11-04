@@ -87,7 +87,7 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
       ..writeln();
     if (docText.isNotEmpty) {
       prompt.writeln('DOCUMENT [${document!.name}]:');
-      prompt.writeln(docText.substring(0, docText.length.clamp(0, 24000)));
+      prompt.writeln(docText.substring(0, docText.length > 24000 ? 24000 : docText.length));
       prompt.writeln('END DOCUMENT');
     }
     prompt.writeln('USER: $question');
