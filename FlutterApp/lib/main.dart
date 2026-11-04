@@ -43,6 +43,13 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   @override
   void initState() { super.initState(); _loadHistory(); _loadModelInfo(); }
 
+  @override
+  void dispose() {
+    _engine.dispose();
+    _question.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadModelInfo() async {
     try {
       final profile = await const MethodChannel('askme/offline_model').invokeMethod<Map<dynamic, dynamic>>('deviceProfile');
@@ -64,7 +71,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       if (!mounted) return;
       if (imported == null) { setState(() => _status = 'Import cancelled'); return; }
       setState(() => _modelInfo = imported);
-      _message('Model file imported. Runtime compatibility is NOT verified; AI answers remain disabled until runtime is installed.');
+      _message('Model imported. GGUF compatibility will be checked when the local runtime loads it.');
     } on PlatformException catch (e) { _message('Model import failed (${e.code}): ${e.message ?? ''}'); }
       catch (e) { _message('Model import failed: $e'); }
     finally { if (mounted) setState(() { _modelBusy = false; _status = 'Offline mode'; }); }
@@ -195,7 +202,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       const SizedBox(height: 8),
       Row(children: [Expanded(child: FilledButton.icon(onPressed: _busy ? null : _ask, icon: const Icon(Icons.send), label: const Text('Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _busy ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: const Text('Cancel')))]),
       const SizedBox(height: 6),
-      const Text('Model import stores the selected file only. Offline inference and offline Hindi/English speech engines are not yet connected; no cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
+      const Text('Offline GGUF inference uses the on-device runtime on supported Android devices. Offline Hindi/English speech and PDF/DOCX extraction are still pending; no cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
     ]))),
   );
 }
