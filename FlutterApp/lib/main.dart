@@ -7,6 +7,7 @@ import 'services/request_cancellation.dart';
 import 'services/secure_history_store.dart';
 import 'services/offline_model_store.dart';
 import 'services/local_selected_document_extractor.dart';
+import 'services/offline_speech_service.dart';
 
 void main() => runApp(const AskMeApp());
 
@@ -32,6 +33,8 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   final _cancellation = RequestCancellation();
   final _modelStore = OfflineModelStore();
   final _documentExtractor = LocalSelectedDocumentExtractor();
+  final _speech = OfflineSpeechService();
+  bool _listening = false;
   ImportedModelInfo? _modelInfo;
   bool _modelBusy = false;
   Map<dynamic, dynamic>? _deviceProfile;
@@ -131,6 +134,32 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
     }
   }
 
+
+  Future<void> _listen(String language) async {
+    if (_busy || _documentBusy || _listening) return;
+    setState(() { _listening = true; _status = 'Listening offline…'; });
+    try {
+      final recognized = await _speech.listen(language: language);
+      if (mounted && recognized.trim().isNotEmpty) {
+        _question.text = recognized.trim();
+        _question.selection = TextSelection.collapsed(offset: _question.text.length);
+      }
+    } on PlatformException catch (e) {
+      if (mounted) _message(e.message ?? 'Offline speech recognition is unavailable.');
+    } finally {
+      if (mounted) setState(() { _listening = false; _status = 'Offline mode'; });
+    }
+  }
+
+  Future<void> _speak(String text) async {
+    final language = RegExp(r'[\u0900-\u097F]').hasMatch(text) ? 'hi-IN' : 'en-US';
+    try {
+      await _speech.speak(text: text, language: language);
+    } on PlatformException catch (e) {
+      if (mounted) _message(e.message ?? 'Offline voice is unavailable on this device.');
+    }
+  }
+
   Future<void> _ask() async {
     if (_documentBusy) return;
     final text = _question.text.trim();
@@ -173,6 +202,8 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
     final id = _activeRequestId;
     if (id == null) return;
     _cancellation.cancelActive();
+    await _speech.stopListening();
+    await _speech.stopSpeaking();
     await _engine.stopAudio();
     final old = _records.firstWhere((x) => x.requestId == id);
     await _replace(AskMeHistoryItem(requestId: id, question: old.question, status: 'Cancelled', createdAt: old.createdAt));
@@ -221,13 +252,13 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       const SizedBox(height: 8),
       Row(children: [const Expanded(child: Text('Conversation history', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17))), Text(_status, style: const TextStyle(fontSize: 11, color: Colors.blueGrey))]),
       const SizedBox(height: 8),
-      Expanded(child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: _records.isEmpty ? const Center(child: Text('Your questions will appear here.')) : ListView.builder(itemCount: _records.length, itemBuilder: (_, i) { final r = _records[i]; return Card(child: ListTile(isThreeLine: r.answer != null, title: Text(r.question), subtitle: Text('${r.status}${r.answer == null ? '' : '\n${r.answer}'}'), leading: const Icon(Icons.chat_bubble_outline))); }))),
+      Expanded(child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: _records.isEmpty ? const Center(child: Text('Your questions will appear here.')) : ListView.builder(itemCount: _records.length, itemBuilder: (_, i) { final r = _records[i]; return Card(child: ListTile(isThreeLine: r.answer != null, title: Text(r.question), subtitle: Text('${r.status}${r.answer == null ? '' : '\n${r.answer}'}'), leading: const Icon(Icons.chat_bubble_outline), trailing: r.answer == null ? null : IconButton(tooltip: 'Speak offline', onPressed: () => _speak(r.answer!), icon: const Icon(Icons.volume_up_outlined)))); }))),
       const SizedBox(height: 10),
       TextField(controller: _question, minLines: 1, maxLines: 4, onSubmitted: (_) => _ask(), decoration: const InputDecoration(hintText: 'Type your question… / अपना प्रश्न लिखें', border: OutlineInputBorder(), prefixIcon: Icon(Icons.edit))),
       const SizedBox(height: 8),
-      Row(children: [Expanded(child: FilledButton.icon(onPressed: (_busy || _documentBusy) ? null : _ask, icon: const Icon(Icons.send), label: Text(_documentBusy ? 'Reading document…' : 'Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: (_busy || _documentBusy) ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: Text(_documentBusy ? 'Cancel reading' : 'Cancel')))]),
+      Row(children: [IconButton(tooltip: 'Hindi voice input offline', onPressed: (_busy || _documentBusy || _listening) ? null : () => _listen('hi-IN'), icon: const Icon(Icons.mic)), IconButton(tooltip: 'English voice input offline', onPressed: (_busy || _documentBusy || _listening) ? null : () => _listen('en-US'), icon: const Icon(Icons.mic_none)), Expanded(child: FilledButton.icon(onPressed: (_busy || _documentBusy) ? null : _ask, icon: const Icon(Icons.send), label: Text(_documentBusy ? 'Reading document…' : 'Ask'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: (_busy || _documentBusy || _listening) ? _cancel : null, icon: const Icon(Icons.cancel_outlined), label: Text(_documentBusy ? 'Cancel reading' : 'Cancel')))]),
       const SizedBox(height: 6),
-      const Text('PDF/DOCX/TXT/MD/CSV/JSON text is extracted locally from the selected file. Scanned PDFs need OCR. Hindi/English offline speech and the C# Android bridge are not integrated yet; no cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
+      const Text('PDF/DOCX/TXT/MD/CSV/JSON text is extracted locally from the selected file. Scanned PDFs need OCR. Hindi/English voice input and offline system TTS use local device language services when installed. No cloud fallback is used.', style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
     ]))),
   );
 }
