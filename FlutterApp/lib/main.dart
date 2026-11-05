@@ -59,9 +59,15 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       final info = await _backendHost.inspect();
       if (mounted) setState(() => _backendRuntimeInfo = info);
     } catch (error) {
-      if (mounted) setState(() => _backendRuntimeInfo = OfflineBackendRuntimeInfo(
-        available: false, apiVersion: 0, error: error.toString(),
-      ));
+      if (mounted) {
+        setState(() {
+          _backendRuntimeInfo = OfflineBackendRuntimeInfo(
+            available: false,
+            apiVersion: 0,
+            error: error.toString(),
+          );
+        });
+      }
     }
   }
 
