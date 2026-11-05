@@ -25,7 +25,6 @@ class LocalSelectedDocumentExtractor {
     }
 
     final directory = await getTemporaryDirectory();
-    _throwIfAlreadyCancelled(cancelled);
     final tempFile = File(p.join(
       directory.path,
       'askme-${DateTime.now().microsecondsSinceEpoch}$extension',
@@ -63,7 +62,7 @@ class LocalSelectedDocumentExtractor {
       return file.readAsString();
     }
     final result = await TextExtractor().extractText(file.path, isUrl: false);
-    return (result['text'] as String?) ?? '';
+    return result.text;
   }
 }
 
