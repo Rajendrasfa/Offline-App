@@ -181,9 +181,10 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
     if (text.isEmpty) return;
     await _cancel(showMessage: false);
     final lease = _cancellation.start();
+    int? nativeRequestId;
     try {
-      final nativeId = await _backendHost.startRequest();
-      if (nativeId != null && nativeId > 0) _nativeBackendRequestId = nativeId;
+      nativeRequestId = await _backendHost.startRequest();
+      if (nativeRequestId != null && nativeRequestId > 0) _nativeBackendRequestId = nativeRequestId;
     } catch (_) {
       _nativeBackendRequestId = null;
     }
@@ -208,11 +209,10 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       if (!mounted || !_cancellation.isCurrent(lease.id)) return;
       await _replace(AskMeHistoryItem(requestId: id, question: text, status: 'Failed', createdAt: item.createdAt));
     } finally {
-      final nativeId = _nativeBackendRequestId;
-      if (nativeId != null) {
-        await _backendHost.completeRequest(nativeId);
-        _nativeBackendRequestId = null;
+      if (nativeRequestId != null && nativeRequestId > 0) {
+        await _backendHost.completeRequest(nativeRequestId);
       }
+      if (_nativeBackendRequestId == nativeRequestId) _nativeBackendRequestId = null;
       _cancellation.complete(lease.id);
       if (mounted && _activeRequestId == id) setState(() { _activeRequestId = null; _busy = false; _status = 'Offline mode'; });
     }
