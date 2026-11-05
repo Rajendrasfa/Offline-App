@@ -261,7 +261,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
         Row(children: [const Icon(Icons.memory), const SizedBox(width: 8), const Expanded(child: Text('Offline AI Model', style: TextStyle(fontWeight: FontWeight.bold))), Text(_modelInfo == null ? 'Not imported' : 'Imported', style: const TextStyle(fontSize: 12, color: Colors.blueGrey))]),
         const SizedBox(height: 4),
         Row(children: [const Icon(Icons.integration_instructions_outlined, size: 16), const SizedBox(width: 6), const Expanded(child: Text('C# Android Backend', style: TextStyle(fontSize: 12))), Text(_backendRuntimeInfo == null ? 'Checking…' : (_backendRuntimeInfo!.available ? 'Connected • ABI ${_backendRuntimeInfo!.apiVersion}' : 'Not connected'), style: TextStyle(fontSize: 11, color: _backendRuntimeInfo?.available == true ? Colors.green : Colors.deepOrange))]),
-        if (_backendRuntimeInfo case final info? when !info.available && info.error.isNotEmpty) Text(info.error, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.deepOrange)),
+        if (_backendRuntimeInfo != null && !_backendRuntimeInfo!.available && _backendRuntimeInfo!.error.isNotEmpty) Text(_backendRuntimeInfo!.error, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.deepOrange)),
         if (_deviceProfile != null) ...[
           const SizedBox(height: 4),
           Text("Device profile: ${_deviceProfile!['deviceTier']} • ${_deviceProfile!['cpuCores']} CPU cores • ${((_deviceProfile!['totalRamBytes'] as num) / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB RAM", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
