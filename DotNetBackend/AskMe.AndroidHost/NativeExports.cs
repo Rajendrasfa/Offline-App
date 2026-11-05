@@ -54,4 +54,8 @@ public static unsafe class NativeExports
     [UnmanagedCallersOnly(EntryPoint = "askme_backend_cancel_request", CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int CancelRequest(long requestId) =>
         Coordinator.Cancel(requestId) ? 1 : 0;
+
+    [UnmanagedCallersOnly(EntryPoint = "askme_backend_complete_request", CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static int CompleteRequest(long requestId) =>
+        Coordinator.Complete(requestId) ? 1 : 0;
 }
