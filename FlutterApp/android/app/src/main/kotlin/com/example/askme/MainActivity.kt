@@ -30,6 +30,34 @@ class MainActivity : FlutterActivity() {
     private var pendingSpeechLanguage: String = "hi-IN"
     private val audioPermissionRequest = 7413
 
+    private var backendLoadAttempted = false
+    private var backendLoadError: String? = null
+
+    private external fun nativeBackendApiVersion(): Int
+    private external fun nativeBackendInitialize(): Int
+
+    private fun backendRuntimeInfo(): Map<String, Any> {
+        if (!backendLoadAttempted) {
+            backendLoadAttempted = true
+            try {
+                System.loadLibrary("askme_android_host")
+                System.loadLibrary("askme_jni_bridge")
+            } catch (error: UnsatisfiedLinkError) {
+                backendLoadError = error.message ?: "Native backend library could not be loaded."
+            }
+        }
+        if (backendLoadError != null) {
+            return mapOf("available" to false, "apiVersion" to 0, "error" to backendLoadError!!)
+        }
+        return try {
+            val version = nativeBackendApiVersion()
+            val initialized = nativeBackendInitialize() == 0
+            mapOf("available" to initialized, "apiVersion" to version, "error" to "")
+        } catch (error: UnsatisfiedLinkError) {
+            mapOf("available" to false, "apiVersion" to 0, "error" to (error.message ?: "JNI entry point unavailable."))
+        }
+    }
+
     override fun onDestroy() {
         pendingSpeechResult?.error("ACTIVITY_DESTROYED", "Speech activity was closed.", null)
         pendingSpeechResult = null
@@ -45,6 +73,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "backendRuntimeInfo" -> result.success(backendRuntimeInfo())
                     "startOfflineSpeech" -> startOfflineSpeech(call.argument<String>("language") ?: "hi-IN", result)
                     "stopOfflineSpeech" -> {
                         speechRecognizer?.cancel()
