@@ -77,9 +77,18 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "backendRuntimeInfo" -> result.success(backendRuntimeInfo())
-                    "backendStartRequest" -> result.success(runCatching { nativeBackendStartRequest() }.getOrDefault(0L))
-                    "backendCancelRequest" -> result.success(runCatching { nativeBackendCancelRequest(call.argument<Number>("requestId")?.toLong() ?: 0L) }.getOrDefault(false))
-                    "backendCompleteRequest" -> result.success(runCatching { nativeBackendCompleteRequest(call.argument<Number>("requestId")?.toLong() ?: 0L) }.getOrDefault(false))
+                    "backendStartRequest" -> {
+                        val info = backendRuntimeInfo()
+                        result.success(if (info["available"] == true) runCatching { nativeBackendStartRequest() }.getOrDefault(0L) else 0L)
+                    }
+                    "backendCancelRequest" -> {
+                        val info = backendRuntimeInfo()
+                        result.success(if (info["available"] == true) runCatching { nativeBackendCancelRequest(call.argument<Number>("requestId")?.toLong() ?: 0L) }.getOrDefault(false) else false)
+                    }
+                    "backendCompleteRequest" -> {
+                        val info = backendRuntimeInfo()
+                        result.success(if (info["available"] == true) runCatching { nativeBackendCompleteRequest(call.argument<Number>("requestId")?.toLong() ?: 0L) }.getOrDefault(false) else false)
+                    }
                     "startOfflineSpeech" -> startOfflineSpeech(call.argument<String>("language") ?: "hi-IN", result)
                     "stopOfflineSpeech" -> {
                         speechRecognizer?.cancel()
