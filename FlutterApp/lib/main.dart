@@ -49,6 +49,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   bool _documentBusy = false;
   Completer<void>? _documentCancel;
   String? _activeRequestId;
+  int? _nativeBackendRequestId;
 
   @override
   void initState() { super.initState(); _loadHistory(); _loadModelInfo(); _loadBackendRuntimeInfo(); }
@@ -180,6 +181,12 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
     if (text.isEmpty) return;
     await _cancel(showMessage: false);
     final lease = _cancellation.start();
+    try {
+      final nativeId = await _backendHost.startRequest();
+      if (nativeId != null && nativeId > 0) _nativeBackendRequestId = nativeId;
+    } catch (_) {
+      _nativeBackendRequestId = null;
+    }
     final id = '${DateTime.now().microsecondsSinceEpoch}-${lease.id}';
     final item = AskMeHistoryItem(requestId: id, question: text, status: 'Pending', createdAt: DateTime.now());
     setState(() { _records.insert(0, item); _busy = true; _activeRequestId = id; _status = 'Processing locally'; _question.clear(); });
@@ -201,6 +208,11 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       if (!mounted || !_cancellation.isCurrent(lease.id)) return;
       await _replace(AskMeHistoryItem(requestId: id, question: text, status: 'Failed', createdAt: item.createdAt));
     } finally {
+      final nativeId = _nativeBackendRequestId;
+      if (nativeId != null) {
+        await _backendHost.completeRequest(nativeId);
+        _nativeBackendRequestId = null;
+      }
       _cancellation.complete(lease.id);
       if (mounted && _activeRequestId == id) setState(() { _activeRequestId = null; _busy = false; _status = 'Offline mode'; });
     }
@@ -222,6 +234,11 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
     final id = _activeRequestId;
     if (id == null) return;
     _cancellation.cancelActive();
+    final nativeId = _nativeBackendRequestId;
+    if (nativeId != null) {
+      await _backendHost.cancelRequest(nativeId);
+      _nativeBackendRequestId = null;
+    }
     await _speech.stopListening();
     await _speech.stopSpeaking();
     await _engine.stopAudio();
