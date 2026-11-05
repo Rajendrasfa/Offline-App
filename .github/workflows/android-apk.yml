@@ -49,8 +49,15 @@ jobs:
             -p:DisableUnsupportedError=true \
             -p:PublishAotUsingRuntimePack=true
           mkdir -p FlutterApp/android/app/src/main/jniLibs/arm64-v8a
-          HOST_LIBRARY="$(find DotNetBackend/AskMe.AndroidHost/bin/Release -name 'libaskme_android_host.so' -print -quit)"
-          test -n "$HOST_LIBRARY"
+          PUBLISH_DIR="DotNetBackend/AskMe.AndroidHost/bin/Release/net10.0/linux-bionic-arm64/publish"
+          echo "NativeAOT publish output:"
+          find "$PUBLISH_DIR" -maxdepth 2 -type f -printf '%f (%s bytes)\\n' | sort
+          HOST_LIBRARY="$(find "$PUBLISH_DIR" -maxdepth 2 -type f -name '*.so' -print -quit)"
+          if [ -z "$HOST_LIBRARY" ]; then
+            echo "::error::NativeAOT publish completed but no shared-library (.so) was found in $PUBLISH_DIR."
+            exit 1
+          fi
+          echo "Using NativeAOT library: $HOST_LIBRARY"
           cp "$HOST_LIBRARY" FlutterApp/android/app/src/main/jniLibs/arm64-v8a/libaskme_android_host.so
 
       - name: Run Backend Tests
