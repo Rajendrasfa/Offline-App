@@ -8,6 +8,7 @@ import 'services/secure_history_store.dart';
 import 'services/offline_model_store.dart';
 import 'services/local_selected_document_extractor.dart';
 import 'services/offline_speech_service.dart';
+import 'services/offline_backend_host.dart';
 
 void main() => runApp(const AskMeApp());
 
@@ -34,6 +35,8 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   final _modelStore = OfflineModelStore();
   final _documentExtractor = LocalSelectedDocumentExtractor();
   final _speech = OfflineSpeechService();
+  final _backendHost = OfflineBackendHost();
+  OfflineBackendRuntimeInfo? _backendRuntimeInfo;
   bool _listening = false;
   ImportedModelInfo? _modelInfo;
   bool _modelBusy = false;
@@ -48,7 +51,18 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
   String? _activeRequestId;
 
   @override
-  void initState() { super.initState(); _loadHistory(); _loadModelInfo(); }
+  void initState() { super.initState(); _loadHistory(); _loadModelInfo(); _loadBackendRuntimeInfo(); }
+
+  Future<void> _loadBackendRuntimeInfo() async {
+    try {
+      final info = await _backendHost.inspect();
+      if (mounted) setState(() => _backendRuntimeInfo = info);
+    } catch (error) {
+      if (mounted) setState(() => _backendRuntimeInfo = OfflineBackendRuntimeInfo(
+        available: false, apiVersion: 0, error: error.toString(),
+      ));
+    }
+  }
 
   Future<void> _loadModelInfo() async {
     try {
@@ -245,6 +259,9 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
       const SizedBox(height: 12),
       Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [const Icon(Icons.memory), const SizedBox(width: 8), const Expanded(child: Text('Offline AI Model', style: TextStyle(fontWeight: FontWeight.bold))), Text(_modelInfo == null ? 'Not imported' : 'Imported', style: const TextStyle(fontSize: 12, color: Colors.blueGrey))]),
+        const SizedBox(height: 4),
+        Row(children: [const Icon(Icons.integration_instructions_outlined, size: 16), const SizedBox(width: 6), const Expanded(child: Text('C# Android Backend', style: TextStyle(fontSize: 12))), Text(_backendRuntimeInfo == null ? 'Checking…' : (_backendRuntimeInfo!.available ? 'Connected • ABI ${_backendRuntimeInfo!.apiVersion}' : 'Not connected'), style: TextStyle(fontSize: 11, color: _backendRuntimeInfo?.available == true ? Colors.green : Colors.deepOrange))]),
+        if (_backendRuntimeInfo case final info? when !info.available && info.error.isNotEmpty) Text(info.error, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.deepOrange)),
         if (_deviceProfile != null) ...[
           const SizedBox(height: 4),
           Text("Device profile: ${_deviceProfile!['deviceTier']} • ${_deviceProfile!['cpuCores']} CPU cores • ${((_deviceProfile!['totalRamBytes'] as num) / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB RAM", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
