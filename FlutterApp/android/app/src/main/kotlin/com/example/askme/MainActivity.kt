@@ -35,6 +35,9 @@ class MainActivity : FlutterActivity() {
 
     private external fun nativeBackendApiVersion(): Int
     private external fun nativeBackendInitialize(): Int
+    private external fun nativeBackendStartRequest(): Long
+    private external fun nativeBackendCancelRequest(requestId: Long): Boolean
+    private external fun nativeBackendCompleteRequest(requestId: Long): Boolean
 
     private fun backendRuntimeInfo(): Map<String, Any> {
         if (!backendLoadAttempted) {
@@ -74,6 +77,9 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "backendRuntimeInfo" -> result.success(backendRuntimeInfo())
+                    "backendStartRequest" -> result.success(runCatching { nativeBackendStartRequest() }.getOrDefault(0L))
+                    "backendCancelRequest" -> result.success(runCatching { nativeBackendCancelRequest(call.argument<Number>("requestId")?.toLong() ?: 0L) }.getOrDefault(false))
+                    "backendCompleteRequest" -> result.success(runCatching { nativeBackendCompleteRequest(call.argument<Number>("requestId")?.toLong() ?: 0L) }.getOrDefault(false))
                     "startOfflineSpeech" -> startOfflineSpeech(call.argument<String>("language") ?: "hi-IN", result)
                     "stopOfflineSpeech" -> {
                         speechRecognizer?.cancel()
