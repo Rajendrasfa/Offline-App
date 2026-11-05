@@ -34,6 +34,25 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Install Android NDK for NativeAOT
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018"
+
+      - name: Publish C# Android NativeAOT host
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          dotnet publish DotNetBackend/AskMe.AndroidHost/AskMe.AndroidHost.csproj \
+            --configuration Release \
+            --runtime linux-bionic-arm64 \
+            -p:DisableUnsupportedError=true \
+            -p:PublishAotUsingRuntimePack=true
+          mkdir -p FlutterApp/android/app/src/main/jniLibs/arm64-v8a
+          HOST_LIBRARY="$(find DotNetBackend/AskMe.AndroidHost/bin/Release -name 'libaskme_android_host.so' -print -quit)"
+          test -n "$HOST_LIBRARY"
+          cp "$HOST_LIBRARY" FlutterApp/android/app/src/main/jniLibs/arm64-v8a/libaskme_android_host.so
+
       - name: Run Backend Tests
         run: dotnet test DotNetBackend/AskMe.Core.Tests/AskMe.Core.Tests.csproj
 
