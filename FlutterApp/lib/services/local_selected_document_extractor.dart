@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:doc_text_extractor/doc_text_extractor.dart';
 import 'package:flutter/services.dart';
