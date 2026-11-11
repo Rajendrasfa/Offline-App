@@ -58,7 +58,8 @@ jobs:
             exit 1
           fi
           echo "Using NativeAOT library: $HOST_LIBRARY"
-          cp "$HOST_LIBRARY" FlutterApp/android/app/src/main/jniLibs/arm64-v8a/libaskme_android_host.so
+          cp -vf "$HOST_LIBRARY" FlutterApp/android/app/src/main/jniLibs/arm64-v8a/libaskme_android_host.so
+          ls -la FlutterApp/android/app/src/main/jniLibs/arm64-v8a/
 
       - name: Run Backend Tests
         run: dotnet test DotNetBackend/AskMe.Core.Tests/AskMe.Core.Tests.csproj
@@ -77,7 +78,17 @@ jobs:
 
       - name: Build Android APK
         working-directory: FlutterApp
-        run: flutter build apk --release
+        run: |
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          SO_FILE=$(find ../DotNetBackend -name "*.so" -print -quit)
+          echo "NativeAOT host library location: $SO_FILE"
+          if [ -n "$SO_FILE" ]; then
+            cp -vf "$SO_FILE" android/app/src/main/jniLibs/arm64-v8a/libaskme_android_host.so
+          fi
+          echo "Verifying jniLibs before APK build:"
+          ls -la android/app/src/main/jniLibs/arm64-v8a/
+          test -s android/app/src/main/jniLibs/arm64-v8a/libaskme_android_host.so
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

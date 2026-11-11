@@ -7,7 +7,13 @@ plugins {
 android {
     namespace = "com.example.askme"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.2.12479018"
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
