@@ -1,14 +1,37 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:doc_text_extractor/doc_text_extractor.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 /// Extracts only bytes explicitly supplied by the user.
+/// Supports documents (PDF, DOCX, TXT, MD, CSV, JSON) and images
+/// (JPG, JPEG, PNG, WEBP, BMP) using local offline extraction and on-device OCR.
 /// The temporary copy is private to the app and deleted after parsing settles.
 class LocalSelectedDocumentExtractor {
   static const _maxBytes = 25 * 1024 * 1024;
+  static const MethodChannel _channel = MethodChannel('askme/offline_model');
+
+  static const _imageExtensions = {
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp',
+    '.bmp',
+  };
+
+  static const _supportedExtensions = {
+    '.pdf',
+    '.docx',
+    '.txt',
+    '.md',
+    '.csv',
+    '.json',
+    ..._imageExtensions,
+  };
 
   Future<String> extract({
     required String fileName,
@@ -20,8 +43,10 @@ class LocalSelectedDocumentExtractor {
       throw const FormatException('Documents larger than 25 MB are not supported.');
     }
     final extension = p.extension(fileName).toLowerCase();
-    if (!const {'.pdf', '.docx', '.txt', '.md', '.csv', '.json'}.contains(extension)) {
-      throw const FormatException('Supported formats: PDF, DOCX, TXT, MD, CSV and JSON.');
+    if (!_supportedExtensions.contains(extension)) {
+      throw const FormatException(
+        'Supported formats: PDF, DOCX, TXT, MD, CSV, JSON and Images (JPG, JPEG, PNG, WEBP, BMP).',
+      );
     }
 
     final directory = await getTemporaryDirectory();
@@ -31,10 +56,7 @@ class LocalSelectedDocumentExtractor {
     ));
     await tempFile.writeAsBytes(bytes, flush: true);
 
-    final parse = _parseFile(tempFile, extension);
-    // The package performs parsing in its own isolate for supported versions.
-    // Dart cannot forcibly terminate that package's isolate, so cancellation
-    // returns immediately while cleanup runs as soon as parsing settles.
+    final parse = _parseFile(tempFile, extension, bytes);
     try {
       final text = await Future.any<String>([
         parse,
@@ -42,8 +64,10 @@ class LocalSelectedDocumentExtractor {
       ]);
       final normalized = text.replaceAll('\u0000', '').trim();
       if (normalized.isEmpty) {
-        throw const FormatException(
-          'No selectable text found. Scanned/image-only PDFs require OCR.',
+        throw FormatException(
+          _imageExtensions.contains(extension)
+              ? 'No readable text was detected in the selected image.'
+              : 'No selectable text found. Scanned/image-only PDFs require OCR.',
         );
       }
       return normalized;
@@ -56,13 +80,28 @@ class LocalSelectedDocumentExtractor {
     }
   }
 
-  Future<String> _parseFile(File file, String extension) async {
+  Future<String> _parseFile(File file, String extension, List<int> bytes) async {
+    if (_imageExtensions.contains(extension)) {
+      return _extractFromImage(bytes);
+    }
     if (extension == '.txt' || extension == '.md' ||
         extension == '.csv' || extension == '.json') {
       return file.readAsString();
     }
     final result = await TextExtractor().extractText(file.path, isUrl: false);
     return result.text;
+  }
+
+  Future<String> _extractFromImage(List<int> bytes) async {
+    try {
+      final text = await _channel.invokeMethod<String>(
+        'extractTextFromImage',
+        {'bytes': Uint8List.fromList(bytes)},
+      );
+      return text ?? '';
+    } on PlatformException catch (e) {
+      throw FormatException(e.message ?? 'Image text recognition failed.');
+    }
   }
 }
 

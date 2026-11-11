@@ -125,7 +125,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
     if (_documentBusy || _busy) return;
     try {
       final result = await FilePicker.platform.pickFiles(type: FileType.custom,
-        allowedExtensions: ['pdf', 'docx', 'txt', 'md', 'csv', 'json'],
+        allowedExtensions: ['pdf', 'docx', 'txt', 'md', 'csv', 'json', 'jpg', 'jpeg', 'png', 'webp', 'bmp'],
         allowMultiple: false, withData: true);
       if (!mounted || result == null || result.files.isEmpty) return;
       final file = result.files.single;
@@ -417,7 +417,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
             ]),
             const SizedBox(height: 6),
             const Text(
-              'PDF/DOCX/TXT/MD/CSV/JSON text is extracted locally from the selected file. Scanned PDFs need OCR. Hindi/English voice input and offline system TTS use local device language services when installed. No cloud fallback is used.',
+              'PDF/DOCX/TXT/MD/CSV/JSON and Images (JPG, PNG, WEBP, BMP via local OCR) are extracted locally from the selected file. Scanned PDFs need OCR. Hindi/English voice input and offline system TTS use local device language services when installed. No cloud fallback is used.',
               style: TextStyle(fontSize: 11, color: Colors.blueGrey),
             ),
           ],

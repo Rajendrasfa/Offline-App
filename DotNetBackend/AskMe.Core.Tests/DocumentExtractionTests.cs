@@ -492,4 +492,18 @@ public class DocumentExtractionTests
         }
     }
 
+    [Theory]
+    [InlineData("receipt.jpg", "Total: 500 INR Paid")]
+    [InlineData("scan.jpeg", "Invoice No: 12345")]
+    [InlineData("chart.png", "Monthly Growth: 25%")]
+    [InlineData("document.webp", "WebP Image Document Content")]
+    [InlineData("diagram.bmp", "System Diagram v1.0")]
+    public async Task ExtractAsync_SupportedImageFormats_ExtractsContent(string fileName, string textContent)
+    {
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(textContent));
+        var chunks = await ExtractAsync(fileName, stream);
+
+        Assert.Single(chunks);
+        Assert.Equal(textContent, chunks[0].Text);
+    }
 }

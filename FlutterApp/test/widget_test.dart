@@ -37,6 +37,8 @@ void _setupMethodChannelMocks() {
           };
         case 'modelInfo':
           return null; // no model imported
+        case 'extractTextFromImage':
+          return 'Sample OCR extracted text from test image.';
         default:
           return null;
       }

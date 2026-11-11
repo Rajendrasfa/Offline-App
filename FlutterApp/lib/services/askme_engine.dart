@@ -97,9 +97,15 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
       try {
         final reqId = await _backendHost.startRequest();
         if (reqId != null && reqId > 0) {
+          final isImage = const {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+              .any((ext) => document.name.toLowerCase().endsWith(ext));
+          final docBytesToSend = (isImage && document.extractedText != null)
+              ? utf8.encode(document.extractedText!)
+              : document.bytes;
+
           final docResult = await _backendHost.processDocument(
             requestId: reqId,
-            docBytes: document.bytes,
+            docBytes: docBytesToSend,
             fileName: document.name,
           );
           if (docResult.ok) {

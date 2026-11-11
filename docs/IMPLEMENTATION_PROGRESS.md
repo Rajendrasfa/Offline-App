@@ -6,7 +6,8 @@
 - Flutter UI uses an offline engine abstraction (`AskMeEngine` → `AndroidLlamaOfflineEngine`).
 - Encrypted history loaded at startup, updated for Pending, Completed, Cancelled and failure states.
 - History read-modify-write operations are serialized via a write queue.
-- File selection limited to PDF, DOCX, TXT, MD, CSV and JSON via Android SAF + `FilePicker`.
+- File selection extended to PDF, DOCX, TXT, MD, CSV, JSON and Images (JPG, JPEG, PNG, WEBP, BMP) via Android SAF + `FilePicker`.
+- On-device offline OCR via Google ML Kit Devanagari text recognition (supports both Hindi and English/Latin scripts directly on device with zero internet).
 - UI does not silently fall back to a network model — produces clear setup-required state.
 - Request cancellation and audio-stop hooks exposed through the engine contract.
 - **RenderFlex overflow fixed** — `SingleChildScrollView` wraps the top section; `Expanded(ListView)` takes remaining space.
@@ -28,7 +29,7 @@
 - `KeywordChunkRetriever` — keyword scoring, top-8, Hindi + English queries supported.
 - `QuestionPipeline` — orchestrates retrieval + answerer + history with cancellation.
 - `QuestionRequestCoordinator` — serializes active requests.
-- **C# tests: 33/33 PASS** (26 original + 7 new `RetrievalTests`).
+- **C# tests: 38/38 PASS** (26 original + 7 retrieval + 5 image format tests).
 
 ### JNI Bridge (C)
 - `nativeBackendApiVersion`, `nativeBackendInitialize` — health check.
@@ -74,6 +75,6 @@ If the C# backend is unavailable (`.so` not loaded), the engine falls back to ra
 ## Test status
 | Suite | Count | Status |
 |---|---|---|
-| C# Core + Retrieval | 33 | ✅ PASS |
+| C# Core + Retrieval + Images | 38 | ✅ PASS |
 | Flutter Widget Tests | 7 | Requires `flutter test` on host with Flutter installed |
 | Android Device Tests | 0 | Pending — requires physical device |

@@ -57,11 +57,11 @@ public sealed class LocalDocumentExtractor : IDocumentExtractor
 
         if (ext == ".docx")
             text = ReadDocx(source, cancellationToken);
-        else if (ext is ".txt" or ".md" or ".csv" or ".json")
+        else if (ext is ".txt" or ".md" or ".csv" or ".json" or ".jpg" or ".jpeg" or ".png" or ".webp" or ".bmp")
             text = await ReadTextAsync(source, cancellationToken);
         else
             throw new NotSupportedException(
-                "Supported formats: PDF, DOCX, TXT, MD, CSV, JSON.");
+                "Supported formats: PDF, DOCX, TXT, MD, CSV, JSON, and Images (JPG, JPEG, PNG, WEBP, BMP).");
 
         var chunks = Split(text);
 

@@ -168,7 +168,7 @@ public static unsafe class NativeExports
         }
 
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        if (!new[] { ".pdf", ".docx", ".txt", ".md", ".csv", ".json" }.Contains(ext))
+        if (!new[] { ".pdf", ".docx", ".txt", ".md", ".csv", ".json", ".jpg", ".jpeg", ".png", ".webp", ".bmp" }.Contains(ext))
             return 3;
 
         try
@@ -319,12 +319,16 @@ public static unsafe class NativeExports
 
     private static string MimeForExtension(string ext) => ext switch
     {
-        ".pdf"  => "application/pdf",
-        ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".txt"  => "text/plain",
-        ".md"   => "text/markdown",
-        ".csv"  => "text/csv",
-        ".json" => "application/json",
-        _       => "application/octet-stream",
+        ".pdf"            => "application/pdf",
+        ".docx"           => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".txt"            => "text/plain",
+        ".md"             => "text/markdown",
+        ".csv"            => "text/csv",
+        ".json"           => "application/json",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".png"            => "image/png",
+        ".webp"           => "image/webp",
+        ".bmp"            => "image/bmp",
+        _                 => "application/octet-stream",
     };
 }

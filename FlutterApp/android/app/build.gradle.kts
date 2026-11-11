@@ -55,3 +55,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // 100% on-device offline OCR for Devanagari (Hindi) and Latin (English)
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
+}

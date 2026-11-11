@@ -3,6 +3,7 @@ package com.example.askme
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -18,6 +19,10 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.RandomAccessFile
 import java.security.MessageDigest
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
+import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
 
 class MainActivity : FlutterActivity() {
     private val channelName = "askme/offline_model"
@@ -29,6 +34,7 @@ class MainActivity : FlutterActivity() {
     private var pendingSpeechResult: MethodChannel.Result? = null
     private var pendingSpeechLanguage: String = "hi-IN"
     private val audioPermissionRequest = 7413
+    private var textRecognizer: TextRecognizer? = null
 
     private var backendLoadAttempted = false
     private var backendLoadError: String? = null
@@ -71,6 +77,37 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun getTextRecognizer(): TextRecognizer {
+        return textRecognizer ?: TextRecognition.getClient(
+            DevanagariTextRecognizerOptions.Builder().build()
+        ).also { textRecognizer = it }
+    }
+
+    private fun extractTextFromImage(bytes: ByteArray, result: MethodChannel.Result) {
+        try {
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            if (bitmap == null) {
+                result.error("IMAGE_DECODE_FAILED", "Could not decode image bytes. Unsupported or corrupted format.", null)
+                return
+            }
+            val image = InputImage.fromBitmap(bitmap, 0)
+            getTextRecognizer().process(image)
+                .addOnSuccessListener { visionText ->
+                    val text = visionText.text.trim()
+                    if (text.isEmpty()) {
+                        result.error("NO_TEXT_FOUND", "No readable text detected in this image.", null)
+                    } else {
+                        result.success(text)
+                    }
+                }
+                .addOnFailureListener { error ->
+                    result.error("OCR_FAILED", error.message ?: "Optical Character Recognition failed.", null)
+                }
+        } catch (e: Exception) {
+            result.error("OCR_EXCEPTION", e.message ?: "OCR processing error.", null)
+        }
+    }
+
     override fun onDestroy() {
         pendingSpeechResult?.error("ACTIVITY_DESTROYED", "Speech activity was closed.", null)
         pendingSpeechResult = null
@@ -78,6 +115,10 @@ class MainActivity : FlutterActivity() {
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
+        try {
+            textRecognizer?.close()
+        } catch (_: Exception) {}
+        textRecognizer = null
         super.onDestroy()
     }
 
@@ -157,6 +198,14 @@ class MainActivity : FlutterActivity() {
                         } catch (e: Exception) {
                             result.error("RETRIEVE_FAILED", e.message ?: "RetrieveChunks native call failed.", null)
                         }
+                    }
+                    "extractTextFromImage" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.error("INVALID_ARGS", "Image bytes are required.", null)
+                            return@setMethodCallHandler
+                        }
+                        extractTextFromImage(bytes, result)
                     }
                     "startOfflineSpeech" -> startOfflineSpeech(call.argument<String>("language") ?: "hi-IN", result)
                     "stopOfflineSpeech" -> {
