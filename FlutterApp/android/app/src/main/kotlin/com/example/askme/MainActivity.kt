@@ -38,6 +38,16 @@ class MainActivity : FlutterActivity() {
     private external fun nativeBackendStartRequest(): Long
     private external fun nativeBackendCancelRequest(requestId: Long): Boolean
     private external fun nativeBackendCompleteRequest(requestId: Long): Boolean
+    private external fun nativeBackendProcessDocument(
+        requestId: Long,
+        docBytes: ByteArray,
+        fileNameBytes: ByteArray
+    ): IntArray   // [returnCode, chunkCount]
+    private external fun nativeBackendRetrieveChunks(
+        requestId: Long,
+        questionBytes: ByteArray,
+        bufferSize: Int
+    ): ByteArray? // null on error; first 4 bytes = int returnCode, rest = UTF-8 context
 
     private fun backendRuntimeInfo(): Map<String, Any> {
         if (!backendLoadAttempted) {
@@ -88,6 +98,65 @@ class MainActivity : FlutterActivity() {
                     "backendCompleteRequest" -> {
                         val info = backendRuntimeInfo()
                         result.success(if (info["available"] == true) runCatching { nativeBackendCompleteRequest(call.argument<Number>("requestId")?.toLong() ?: 0L) }.getOrDefault(false) else false)
+                    }
+                    "backendProcessDocument" -> {
+                        val reqId   = call.argument<Number>("requestId")?.toLong() ?: 0L
+                        val docBytes  = call.argument<ByteArray>("docBytes")
+                        val fileName  = call.argument<String>("fileName") ?: ""
+                        if (docBytes == null || docBytes.isEmpty() || fileName.isBlank()) {
+                            result.error("INVALID_ARGS", "docBytes and fileName are required.", null)
+                            return@setMethodCallHandler
+                        }
+                        val info = backendRuntimeInfo()
+                        if (info["available"] != true) {
+                            result.error("BACKEND_UNAVAILABLE", "Native backend is not loaded.", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val r = nativeBackendProcessDocument(reqId, docBytes, fileName.toByteArray(Charsets.UTF_8))
+                            // r[0] = returnCode, r[1] = chunkCount
+                            result.success(mapOf("returnCode" to r[0], "chunkCount" to r[1]))
+                        } catch (e: Exception) {
+                            result.error("PROCESS_DOC_FAILED", e.message ?: "ProcessDocument native call failed.", null)
+                        }
+                    }
+                    "backendRetrieveChunks" -> {
+                        val reqId    = call.argument<Number>("requestId")?.toLong() ?: 0L
+                        val question = call.argument<String>("question") ?: ""
+                        if (question.isBlank()) {
+                            result.error("INVALID_ARGS", "question is required.", null)
+                            return@setMethodCallHandler
+                        }
+                        val info = backendRuntimeInfo()
+                        if (info["available"] != true) {
+                            result.error("BACKEND_UNAVAILABLE", "Native backend is not loaded.", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            // Initial buffer 128 KiB; retry with 512 KiB if too small (returnCode 6).
+                            var bufSize = 128 * 1024
+                            var raw = nativeBackendRetrieveChunks(reqId, question.toByteArray(Charsets.UTF_8), bufSize)
+                            if (raw != null && raw.size >= 4) {
+                                val rc = java.nio.ByteBuffer.wrap(raw, 0, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+                                if (rc == 6) {
+                                    bufSize = 512 * 1024
+                                    raw = nativeBackendRetrieveChunks(reqId, question.toByteArray(Charsets.UTF_8), bufSize)
+                                }
+                            }
+                            if (raw == null || raw.size < 4) {
+                                result.error("RETRIEVE_FAILED", "Native retrieve returned no data.", null)
+                                return@setMethodCallHandler
+                            }
+                            val rc2 = java.nio.ByteBuffer.wrap(raw, 0, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+                            if (rc2 != 0) {
+                                result.error("RETRIEVE_FAILED", "Native retrieve returnCode=$rc2.", null)
+                                return@setMethodCallHandler
+                            }
+                            val context = String(raw, 4, raw.size - 4, Charsets.UTF_8)
+                            result.success(context)
+                        } catch (e: Exception) {
+                            result.error("RETRIEVE_FAILED", e.message ?: "RetrieveChunks native call failed.", null)
+                        }
                     }
                     "startOfflineSpeech" -> startOfflineSpeech(call.argument<String>("language") ?: "hi-IN", result)
                     "stopOfflineSpeech" -> {
@@ -358,6 +427,10 @@ class MainActivity : FlutterActivity() {
             ramGb >= 4.0 -> "compact"
             else -> "minimum"
         }
+        // modelRuntimeReady: true when the native backend library is loaded AND
+        // the imported GGUF model file exists and passes the header check.
+        val modelFile = File(File(filesDir, "models"), "model.gguf")
+        val modelReady = modelFile.isFile && isGguf(modelFile) && backendLoadError == null
         return mapOf(
             "sdkInt" to Build.VERSION.SDK_INT,
             "supportedAbis" to Build.SUPPORTED_ABIS.toList(),
@@ -367,7 +440,7 @@ class MainActivity : FlutterActivity() {
             "availableRamBytes" to memory.availMem,
             "lowMemory" to memory.lowMemory,
             "deviceTier" to tier,
-            "modelRuntimeReady" to false
+            "modelRuntimeReady" to modelReady
         )
     }
 

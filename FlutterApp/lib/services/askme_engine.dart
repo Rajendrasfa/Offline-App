@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
+import 'offline_backend_host.dart';
 
 class AskMeDocument {
   const AskMeDocument({required this.name, required this.bytes, this.extractedText});
@@ -29,9 +30,17 @@ abstract interface class AskMeEngine {
 /// On-device llama.cpp adapter. No HTTP client or network fallback is used.
 /// This adapter currently targets Android API 26+ ARM64 builds supported by
 /// llama_flutter_android; unsupported ABIs fail closed instead of faking output.
+///
+/// When the C# NativeAOT backend is available, it is used for document
+/// extraction and RAG chunk retrieval before the prompt is sent to llama.cpp.
+/// This gives grounded, source-cited answers from large documents.
 class AndroidLlamaOfflineEngine implements AskMeEngine {
+  AndroidLlamaOfflineEngine({OfflineBackendHost? backendHost})
+      : _backendHost = backendHost ?? OfflineBackendHost();
+
   static const _channel = MethodChannel('askme/offline_model');
   final LlamaController _controller = LlamaController();
+  final OfflineBackendHost _backendHost;
   bool _loaded = false;
   bool _disposed = false;
   Future<void>? _loading;
@@ -77,16 +86,57 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
     required Future<void> cancelled,
   }) async {
     await _ensureLoaded();
-    final docText = document == null
-        ? ''
-        : (document.extractedText ?? utf8.decode(document.bytes, allowMalformed: true));
+
+    // -----------------------------------------------------------------
+    // Step 1: Try C# NativeAOT backend for document extraction + RAG.
+    // If the backend is unavailable, fall back to raw document bytes.
+    // -----------------------------------------------------------------
+    String docContext = '';
+    if (document != null) {
+      String? backendContext;
+      try {
+        final reqId = await _backendHost.startRequest();
+        if (reqId != null && reqId > 0) {
+          final docResult = await _backendHost.processDocument(
+            requestId: reqId,
+            docBytes: document.bytes,
+            fileName: document.name,
+          );
+          if (docResult.ok) {
+            backendContext = await _backendHost.retrieveChunks(
+              requestId: reqId,
+              question: question,
+            );
+          }
+          // Always complete (don't cancel) — inference lease is separate.
+          await _backendHost.completeRequest(reqId);
+        }
+      } catch (_) {
+        // Backend unavailable — silent fallback to raw text below.
+      }
+
+      if (backendContext != null && backendContext.isNotEmpty) {
+        docContext = backendContext;
+      } else {
+        // Fallback: use raw bytes / pre-extracted text (original behaviour).
+        docContext = document.extractedText ??
+            utf8.decode(document.bytes, allowMalformed: true);
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // Step 2: Build the prompt and run llama.cpp inference.
+    // -----------------------------------------------------------------
     final prompt = StringBuffer()
       ..writeln('You are AskMe, a private offline assistant. Reply in the language used by the user.')
       ..writeln('Use only the supplied document when answering document questions. If the answer is absent, say so.')
       ..writeln();
-    if (docText.isNotEmpty) {
+    if (docContext.isNotEmpty) {
       prompt.writeln('DOCUMENT [${document!.name}]:');
-      prompt.writeln(docText.substring(0, docText.length > 24000 ? 24000 : docText.length));
+      final truncated = docContext.length > 24000
+          ? docContext.substring(0, 24000)
+          : docContext;
+      prompt.writeln(truncated);
       prompt.writeln('END DOCUMENT');
     }
     prompt.writeln('USER: $question');
@@ -114,9 +164,6 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
     var cancellationRequested = false;
     final cancelSub = cancelled.asStream().listen((_) async {
       cancellationRequested = true;
-      // Stop the native llama.cpp generation before allowing the request to
-      // settle. The caller's request lease prevents a cancelled result from
-      // being written to history even if native shutdown takes a moment.
       await _controller.stop();
       await _generation?.cancel();
       if (!done.isCompleted) done.complete();
