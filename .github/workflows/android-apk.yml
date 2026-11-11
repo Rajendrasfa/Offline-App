@@ -80,7 +80,7 @@ jobs:
         working-directory: FlutterApp
         run: |
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
-          SO_FILE=$(find ../DotNetBackend -name "*.so" -print -quit)
+          SO_FILE=$(find ../DotNetBackend/AskMe.AndroidHost/bin/Release/net10.0/linux-bionic-arm64/publish -maxdepth 2 -type f -name "*.so" -print -quit)
           echo "NativeAOT host library location: $SO_FILE"
           if [ -n "$SO_FILE" ]; then
             cp -vf "$SO_FILE" android/app/src/main/jniLibs/arm64-v8a/libaskme_android_host.so
@@ -88,7 +88,8 @@ jobs:
           echo "Verifying jniLibs before APK build:"
           ls -la android/app/src/main/jniLibs/arm64-v8a/
           test -s android/app/src/main/jniLibs/arm64-v8a/libaskme_android_host.so
-          flutter build apk --release
+          flutter build apk --release --target-platform android-arm64
+          ls -lh build/app/outputs/flutter-apk/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
