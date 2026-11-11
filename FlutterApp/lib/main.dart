@@ -274,120 +274,109 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
     appBar: AppBar(title: const Text('AskMe', style: TextStyle(fontWeight: FontWeight.bold)), centerTitle: true,
       actions: [IconButton(tooltip: 'Privacy and status', onPressed: () => showAboutDialog(context: context, applicationName: 'AskMe', applicationVersion: '0.2.0', children: const [Text('Designed for on-device processing. No cloud fallback is configured. Only files explicitly selected in this session are supplied to the engine.')]), icon: const Icon(Icons.privacy_tip_outlined))]),
     body: SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Scrollable top section: header banner, model card, file picker, history label
-            SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFF063B91), Color(0xFF087CF0)]),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Your private AI document assistant', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 7),
-                      Text('Hindi + English \u2022 Selected files only', style: TextStyle(color: Colors.white70)),
-                      SizedBox(height: 8),
-                      Text('Local encrypted history \u2022 No cloud fallback', style: TextStyle(color: Colors.white)),
-                    ]),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF063B91), Color(0xFF087CF0)]),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Your private AI document assistant', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+                SizedBox(height: 7),
+                Text('Hindi + English \u2022 Selected files only', style: TextStyle(color: Colors.white70)),
+                SizedBox(height: 8),
+                Text('Local encrypted history \u2022 No cloud fallback', style: TextStyle(color: Colors.white)),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            Card(child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Row(children: [
+                  const Icon(Icons.memory),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('Offline AI Model', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Text(_modelInfo == null ? 'Not imported' : 'Imported', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                ]),
+                const SizedBox(height: 4),
+                Row(children: [
+                  const Icon(Icons.integration_instructions_outlined, size: 16),
+                  const SizedBox(width: 6),
+                  const Expanded(child: Text('C# Android Backend', style: TextStyle(fontSize: 12))),
+                  Text(
+                    _backendRuntimeInfo == null ? 'Checking\u2026' : (_backendRuntimeInfo!.available ? 'Connected \u2022 ABI ${_backendRuntimeInfo!.apiVersion}' : 'Not connected'),
+                    style: TextStyle(fontSize: 11, color: _backendRuntimeInfo?.available == true ? Colors.green : Colors.deepOrange),
                   ),
-                  const SizedBox(height: 12),
-                  Card(child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Row(children: [
-                        const Icon(Icons.memory),
-                        const SizedBox(width: 8),
-                        const Expanded(child: Text('Offline AI Model', style: TextStyle(fontWeight: FontWeight.bold))),
-                        Text(_modelInfo == null ? 'Not imported' : 'Imported', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
-                      ]),
-                      const SizedBox(height: 4),
-                      Row(children: [
-                        const Icon(Icons.integration_instructions_outlined, size: 16),
-                        const SizedBox(width: 6),
-                        const Expanded(child: Text('C# Android Backend', style: TextStyle(fontSize: 12))),
-                        Text(
-                          _backendRuntimeInfo == null ? 'Checking\u2026' : (_backendRuntimeInfo!.available ? 'Connected \u2022 ABI ${_backendRuntimeInfo!.apiVersion}' : 'Not connected'),
-                          style: TextStyle(fontSize: 11, color: _backendRuntimeInfo?.available == true ? Colors.green : Colors.deepOrange),
-                        ),
-                      ]),
-                      if (_backendRuntimeInfo != null && !_backendRuntimeInfo!.available && _backendRuntimeInfo!.error.isNotEmpty)
-                        Text(_backendRuntimeInfo!.error, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.deepOrange)),
-                      if (_deviceProfile != null) ...[
-                        const SizedBox(height: 4),
-                        Text("Device profile: ${_deviceProfile!['deviceTier']} \u2022 ${_deviceProfile!['cpuCores']} CPU cores \u2022 ${((_deviceProfile!['totalRamBytes'] as num) / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB RAM", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
-                        Text("Supported CPU: ${(_deviceProfile!['supportedAbis'] as List).join(', ')}", style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
-                      ],
-                      if (_modelInfo != null) ...[
-                        const SizedBox(height: 6),
-                        Text('${_modelInfo!.storedName} \u2022 ${(_modelInfo!.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB'),
-                        Text('SHA-256: ${_modelInfo!.sha256}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)),
-                        Text(_modelInfo!.message ?? 'Runtime compatibility not verified.', style: const TextStyle(fontSize: 11, color: Colors.deepOrange)),
-                      ],
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(child: OutlinedButton.icon(
-                          onPressed: (_busy || _modelBusy) ? null : _importModel,
-                          icon: const Icon(Icons.file_open),
-                          label: Text(_modelBusy ? 'Please wait\u2026' : (_modelInfo == null ? 'Import model' : 'Replace model')),
-                        )),
-                        if (_modelInfo != null) ...[
-                          const SizedBox(width: 8),
-                          IconButton(tooltip: 'Remove model', onPressed: (_busy || _modelBusy) ? null : _removeModel, icon: const Icon(Icons.delete_outline)),
-                        ],
-                      ]),
-                    ]),
-                  )),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: (_busy || _documentBusy) ? null : _chooseFile,
-                    icon: const Icon(Icons.attach_file),
-                    label: Text(_document == null ? 'Select a document' : 'Change: ${_document!.name}'),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Expanded(child: Text('Conversation history', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17))),
-                    Text(_status, style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
-                  ]),
-                  const SizedBox(height: 8),
+                ]),
+                if (_backendRuntimeInfo != null && !_backendRuntimeInfo!.available && _backendRuntimeInfo!.error.isNotEmpty)
+                  Text(_backendRuntimeInfo!.error, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.deepOrange)),
+                if (_deviceProfile != null) ...[
+                  const SizedBox(height: 4),
+                  Text("Device profile: ${_deviceProfile!['deviceTier']} \u2022 ${_deviceProfile!['cpuCores']} CPU cores \u2022 ${((_deviceProfile!['totalRamBytes'] as num) / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB RAM", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+                  Text("Supported CPU: ${(_deviceProfile!['supportedAbis'] as List).join(', ')}", style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
                 ],
-              ),
+                if (_modelInfo != null) ...[
+                  const SizedBox(height: 6),
+                  Text('${_modelInfo!.storedName} \u2022 ${(_modelInfo!.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB'),
+                  Text('SHA-256: ${_modelInfo!.sha256}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)),
+                  Text(_modelInfo!.message ?? 'Runtime compatibility not verified.', style: const TextStyle(fontSize: 11, color: Colors.deepOrange)),
+                ],
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: OutlinedButton.icon(
+                    onPressed: (_busy || _modelBusy) ? null : _importModel,
+                    icon: const Icon(Icons.file_open),
+                    label: Text(_modelBusy ? 'Please wait\u2026' : (_modelInfo == null ? 'Import model' : 'Replace model')),
+                  )),
+                  if (_modelInfo != null) ...[
+                    const SizedBox(width: 8),
+                    IconButton(tooltip: 'Remove model', onPressed: (_busy || _modelBusy) ? null : _removeModel, icon: const Icon(Icons.delete_outline)),
+                  ],
+                ]),
+              ]),
+            )),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: (_busy || _documentBusy) ? null : _chooseFile,
+              icon: const Icon(Icons.attach_file),
+              label: Text(_document == null ? 'Select a document' : 'Change: ${_document!.name}'),
             ),
-            // Conversation list — Expanded takes all remaining vertical space
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-                child: _records.isEmpty
-                  ? const Center(child: Text('Your questions will appear here.'))
-                  : ListView.builder(
-                      itemCount: _records.length,
-                      itemBuilder: (_, i) {
-                        final r = _records[i];
-                        return Card(child: ListTile(
-                          isThreeLine: r.answer != null,
-                          title: Text(r.question),
-                          subtitle: Text('${r.status}${r.answer == null ? '' : '\n${r.answer}'}'),
-                          leading: const Icon(Icons.chat_bubble_outline),
-                          trailing: r.answer == null ? null : IconButton(
-                            tooltip: 'Speak offline',
-                            onPressed: () => _speak(r.answer!),
-                            icon: const Icon(Icons.volume_up_outlined),
-                          ),
-                        ));
-                      },
-                    ),
-              ),
+            const SizedBox(height: 8),
+            Row(children: [
+              const Expanded(child: Text('Conversation history', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17))),
+              Text(_status, style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+            ]),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+              child: _records.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(child: Text('Your questions will appear here.')),
+                  )
+                : Column(
+                    children: _records.map((r) => Card(
+                      child: ListTile(
+                        isThreeLine: r.answer != null,
+                        title: Text(r.question),
+                        subtitle: Text('${r.status}${r.answer == null ? '' : '\n${r.answer}'}'),
+                        leading: const Icon(Icons.chat_bubble_outline),
+                        trailing: r.answer == null ? null : IconButton(
+                          tooltip: 'Speak offline',
+                          onPressed: () => _speak(r.answer!),
+                          icon: const Icon(Icons.volume_up_outlined),
+                        ),
+                      ),
+                    )).toList(),
+                  ),
             ),
-            const SizedBox(height: 10),
-            // Input and action controls — always visible at the bottom
+            const SizedBox(height: 12),
             TextField(
               controller: _question,
               minLines: 1,
@@ -415,7 +404,7 @@ class _AskMeHomePageState extends State<AskMeHomePage> {
                 label: Text(_documentBusy ? 'Cancel reading' : 'Cancel'),
               )),
             ]),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             const Text(
               'PDF/DOCX/TXT/MD/CSV/JSON and Images (JPG, PNG, WEBP, BMP via local OCR) are extracted locally from the selected file. Scanned PDFs need OCR. Hindi/English voice input and offline system TTS use local device language services when installed. No cloud fallback is used.',
               style: TextStyle(fontSize: 11, color: Colors.blueGrey),
