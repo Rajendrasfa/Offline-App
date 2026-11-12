@@ -310,6 +310,20 @@ class MainActivity : FlutterActivity() {
                         val dir = File(filesDir, "models")
                         result.success(!dir.exists() || dir.deleteRecursively())
                     }
+                    "openExternalUrl" -> {
+                        val url = call.argument<String>("url")?.trim() ?: ""
+                        if (!url.startsWith("https://huggingface.co/")) {
+                            result.error("INVALID_URL", "Only verified HuggingFace model URLs can be opened.", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("BROWSER_UNAVAILABLE", e.message ?: "No browser available to open URL.", null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

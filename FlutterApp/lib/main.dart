@@ -910,6 +910,82 @@ class _AskMeHomePageState extends State<AskMeHomePage>
     }
   }
 
+  Future<void> _openExternalDownloadUrl(String url) async {
+    try {
+      await const MethodChannel('askme/offline_model').invokeMethod<bool>(
+        'openExternalUrl',
+        {'url': url},
+      );
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: url));
+      if (mounted) {
+        _message('URL copied. Open it in your browser to download the GGUF file.');
+      }
+    }
+  }
+
+  Widget _buildModelDownloadOption({
+    required BuildContext sheetContext,
+    required String title,
+    required String subtitle,
+    required String url,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE0E7F1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          ),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+          ),
+          const SizedBox(height: 4),
+          SelectableText(
+            url,
+            style: const TextStyle(fontSize: 10, color: Color(0xFF063B91)),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: url));
+                    Navigator.of(sheetContext).pop();
+                    _message('Download URL copied to clipboard.');
+                  },
+                  icon: const Icon(Icons.copy_outlined, size: 15),
+                  label: const Text('Copy URL', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () async {
+                    Navigator.of(sheetContext).pop();
+                    await _openExternalDownloadUrl(url);
+                  },
+                  icon: const Icon(Icons.open_in_browser, size: 15),
+                  label: const Text('Download', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   void _openModelSettingsSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -1074,7 +1150,7 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const Text(
-                          'Recommended Model (Option 2 Setup)',
+                          'Download Offline Model (Option 2 Setup)',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
@@ -1082,23 +1158,29 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'Qwen2.5-1.5B-Instruct (qwen2.5-1.5b-instruct-q4_k_m.gguf • ~1.04 GB • Hindi + English). Download to phone Downloads folder or run ModelSetup/Download_Option2_Model.bat on PC, then tap Import Model above.',
+                          'Download any Qwen2.5-1.5B GGUF file in your browser (saves to Downloads), then tap Import Model above.',
                           style: TextStyle(fontSize: 11, color: Colors.blueGrey),
                         ),
-                        const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            Clipboard.setData(
-                              const ClipboardData(
-                                text:
-                                    'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
-                              ),
-                            );
-                            Navigator.of(sheetContext).pop();
-                            _message('Model download URL copied to clipboard.');
-                          },
-                          icon: const Icon(Icons.copy_outlined, size: 16),
-                          label: const Text('Copy Qwen2.5-1.5B Q4_K_M Link'),
+                        _buildModelDownloadOption(
+                          sheetContext: sheetContext,
+                          title: 'Qwen2.5-1.5B-Instruct Q4_K_M (Recommended)',
+                          subtitle: '~1.04 GB • Best Hindi + English accuracy',
+                          url:
+                              'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
+                        ),
+                        _buildModelDownloadOption(
+                          sheetContext: sheetContext,
+                          title: 'Qwen2.5-1.5B-Instruct Q3_K_M',
+                          subtitle: '~786 MiB • Balanced smaller size',
+                          url:
+                              'https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q3_K_M.gguf',
+                        ),
+                        _buildModelDownloadOption(
+                          sheetContext: sheetContext,
+                          title: 'Qwen2.5-1.5B-Instruct Q3_K_S',
+                          subtitle: '~726 MiB • Compact size',
+                          url:
+                              'https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q3_K_S.gguf',
                         ),
                       ],
                     ),
@@ -1219,7 +1301,7 @@ class _AskMeHomePageState extends State<AskMeHomePage>
           )
         else if (_modelInfo == null)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             color: const Color(0xFFFFF3E0),
             child: Row(
               children: [
@@ -1228,14 +1310,24 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                   size: 16,
                   color: Colors.deepOrange,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 const Expanded(
                   child: Text(
-                    'Import a local GGUF model to start chatting offline.',
+                    'Offline AI model missing.',
                     style: TextStyle(fontSize: 12),
                   ),
                 ),
                 TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  onPressed: _openModelSettingsSheet,
+                  child: const Text('Get URL'),
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
                   onPressed: _importModel,
                   child: const Text('Import'),
                 ),

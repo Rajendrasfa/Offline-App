@@ -30,4 +30,19 @@ void main() {
     expect(find.text('Upload File'), findsOneWidget);
     expect(find.text('Saved Documents (0)'), findsOneWidget);
   });
+
+  testWidgets('Model settings sheet displays Option 2 download URLs without overflow',
+      (tester) async {
+    await tester.pumpWidget(const AskMeApp());
+
+    await tester.tap(find.text('Get URL'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Download Offline Model (Option 2 Setup)'), findsOneWidget);
+    expect(find.text('Qwen2.5-1.5B-Instruct Q4_K_M (Recommended)'), findsOneWidget);
+    expect(find.text('Copy URL'), findsNWidgets(3));
+    expect(find.text('Download'), findsNWidgets(3));
+  });
 }
