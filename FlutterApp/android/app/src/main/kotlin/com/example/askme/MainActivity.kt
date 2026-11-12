@@ -33,6 +33,8 @@ class MainActivity : FlutterActivity() {
     private val pickModelRequest = 7412
     private val captureCameraRequest = 7414
     private var pendingResult: MethodChannel.Result? = null
+    @Volatile
+    private var modelImportInProgress = false
     private var pendingCameraResult: MethodChannel.Result? = null
     private var pendingCameraFile: File? = null
     private var speechRecognizer: SpeechRecognizer? = null
@@ -279,17 +281,17 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                     "importModel" -> {
-                        if (pendingResult != null) {
+                        if (pendingResult != null || modelImportInProgress) {
                             result.error("IMPORT_BUSY", "A model import is already in progress.", null)
                             return@setMethodCallHandler
                         }
                         pendingResult = result
+                        // Do not restrict EXTRA_MIME_TYPES: Android MediaStore/SAF providers
+                        // often assign unknown/binary MIME types to .gguf files, which hides
+                        // them in the picker. GGUF container header is validated on read.
                         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                             addCategory(Intent.CATEGORY_OPENABLE)
                             type = "*/*"
-                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
-                                "application/octet-stream", "application/x-gguf", "application/gguf"
-                            ))
                         }
                         try {
                             startActivityForResult(intent, pickModelRequest)
@@ -357,11 +359,26 @@ class MainActivity : FlutterActivity() {
             callback.success(null)
             return
         }
-        try {
-            callback.success(importSelectedModel(data.data!!))
-        } catch (e: Exception) {
-            callback.error("MODEL_IMPORT_FAILED", e.message ?: "Could not import selected model.", null)
-        }
+        val selectedUri = data.data!!
+        modelImportInProgress = true
+        Thread {
+            try {
+                val imported = importSelectedModel(selectedUri)
+                runOnUiThread {
+                    modelImportInProgress = false
+                    callback.success(imported)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    modelImportInProgress = false
+                    callback.error(
+                        "MODEL_IMPORT_FAILED",
+                        e.message ?: "Could not import selected model.",
+                        null
+                    )
+                }
+            }
+        }.start()
     }
 
 
@@ -496,13 +513,26 @@ class MainActivity : FlutterActivity() {
 
     // GGUF files begin with the ASCII magic "GGUF" followed by a little-endian
     // version. This validates the container header, not model architecture.
+    private fun isGgufHeader(bytes: ByteArray, length: Int): Boolean {
+        if (length < 24) return false
+        val version =
+            (bytes[4].toInt() and 0xFF) or
+            ((bytes[5].toInt() and 0xFF) shl 8) or
+            ((bytes[6].toInt() and 0xFF) shl 16) or
+            ((bytes[7].toInt() and 0xFF) shl 24)
+        return bytes[0] == 0x47.toByte() &&
+            bytes[1] == 0x47.toByte() &&
+            bytes[2] == 0x55.toByte() &&
+            bytes[3] == 0x46.toByte() &&
+            version in 2..3
+    }
+
     private fun isGguf(file: File): Boolean {
         if (!file.isFile || file.length() < 24L) return false
         RandomAccessFile(file, "r").use { input ->
-            val magic = ByteArray(4)
-            input.readFully(magic)
-            val version = Integer.reverseBytes(input.readInt())
-            return magic.contentEquals(byteArrayOf(0x47, 0x47, 0x55, 0x46)) && version in 2..3
+            val header = ByteArray(24)
+            input.readFully(header)
+            return isGgufHeader(header, header.size)
         }
     }
 
@@ -517,7 +547,23 @@ class MainActivity : FlutterActivity() {
         val maxBytes = 8L * 1024L * 1024L * 1024L
         try {
             contentResolver.openInputStream(uri)?.use { input ->
+                // Validate the 24-byte GGUF header immediately before copying gigabytes.
+                val header = ByteArray(24)
+                var headerRead = 0
+                while (headerRead < header.size) {
+                    val count = input.read(header, headerRead, header.size - headerRead)
+                    if (count < 0) break
+                    headerRead += count
+                }
+                require(isGgufHeader(header, headerRead)) {
+                    "Selected file is not a supported GGUF v2/v3 model."
+                }
+
                 temp.outputStream().buffered().use { output ->
+                    digest.update(header, 0, headerRead)
+                    output.write(header, 0, headerRead)
+                    total = headerRead.toLong()
+
                     val buffer = ByteArray(1024 * 1024)
                     while (true) {
                         val count = input.read(buffer)
@@ -529,7 +575,6 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             } ?: error("Selected file cannot be opened.")
-            require(isGguf(temp)) { "Selected file is not a supported GGUF v2/v3 model." }
             if (backup.exists()) backup.delete()
             if (target.exists()) require(target.renameTo(backup)) { "Could not preserve the previous model." }
             if (!temp.renameTo(target)) {

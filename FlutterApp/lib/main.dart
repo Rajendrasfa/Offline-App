@@ -1164,7 +1164,21 @@ class _AskMeHomePageState extends State<AskMeHomePage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_modelInfo == null)
+        if (_modelBusy)
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LinearProgressIndicator(),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                child: Text(
+                  'Importing & validating GGUF model locally… Please wait.',
+                  style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                ),
+              ),
+            ],
+          )
+        else if (_modelInfo == null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             color: const Color(0xFFFFF3E0),
@@ -1183,7 +1197,7 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                   ),
                 ),
                 TextButton(
-                  onPressed: _modelBusy ? null : _importModel,
+                  onPressed: _importModel,
                   child: const Text('Import'),
                 ),
               ],
