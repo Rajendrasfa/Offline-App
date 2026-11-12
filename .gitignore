@@ -30,3 +30,9 @@ local.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Offline AI GGUF models (kept separate from Git due to >100 MB size)
+*.gguf
+*.gguf.partial
+*.sha256
+ModelSetup/output/

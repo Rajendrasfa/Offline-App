@@ -1,0 +1,72 @@
+name: Build Option 2 Model Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      quantization:
+        description: 'Option 2 model quantization (Qwen2.5-1.5B-Instruct, Apache-2.0)'
+        required: true
+        default: 'q4_k_m'
+        type: choice
+        options:
+          - q4_k_m
+          - q3_k_m
+          - q3_k_s
+
+jobs:
+  package-model:
+    name: Download & Verify Option 2 Model
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Select model URL
+        id: model
+        run: |
+          case "${{ inputs.quantization }}" in
+            q4_k_m)
+              echo "filename=qwen2.5-1.5b-instruct-q4_k_m.gguf" >> "$GITHUB_OUTPUT"
+              echo "url=https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf" >> "$GITHUB_OUTPUT"
+              ;;
+            q3_k_m)
+              echo "filename=Qwen2.5-1.5B-Instruct-Q3_K_M.gguf" >> "$GITHUB_OUTPUT"
+              echo "url=https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q3_K_M.gguf" >> "$GITHUB_OUTPUT"
+              ;;
+            q3_k_s)
+              echo "filename=Qwen2.5-1.5B-Instruct-Q3_K_S.gguf" >> "$GITHUB_OUTPUT"
+              echo "url=https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q3_K_S.gguf" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Download and verify GGUF v2/v3 package
+        run: |
+          mkdir -p model-package
+          FILE="model-package/${{ steps.model.outputs.filename }}"
+          curl -fL --retry 3 -o "$FILE" "${{ steps.model.outputs.url }}"
+          python3 - "$FILE" << 'EOF'
+          import struct, sys
+          path = sys.argv[1]
+          with open(path, 'rb') as f:
+              hdr = f.read(24)
+          assert len(hdr) == 24 and hdr[:4] == b'GGUF', f'Invalid GGUF magic: {hdr[:4]!r}'
+          ver = struct.unpack('<I', hdr[4:8])[0]
+          assert ver in (2, 3), f'Unsupported GGUF version: {ver}'
+          print(f'Verified GGUF v{ver}: {path}')
+          EOF
+          (cd model-package && sha256sum "${{ steps.model.outputs.filename }}" > SHA256SUMS.txt)
+          cat << 'EOF' > model-package/IMPORT_INSTRUCTIONS.txt
+          AskMe Option 2 Offline Model Package (Qwen2.5-1.5B-Instruct, Apache-2.0)
+
+          1. Extract this zip on your phone or PC.
+          2. Copy the .gguf file to your Android phone's Downloads folder.
+          3. Open AskMe app -> tap "Import Model" -> open Downloads -> select the .gguf file.
+          4. Wait for the progress bar to complete until the top bar shows green "Model Ready".
+          5. Compare the SHA-256 checksum inside AskMe against SHA256SUMS.txt if desired.
+          EOF
+          ls -lh model-package/
+
+      - name: Upload Option 2 Model Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AskMe-Option2-Model-Package-${{ inputs.quantization }}
+          path: model-package/
+          retention-days: 14

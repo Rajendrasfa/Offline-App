@@ -1065,6 +1065,45 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                     ),
                   ),
                 ),
+                const SizedBox(height: 10),
+                Card(
+                  color: const Color(0xFFF3F6FB),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Recommended Model (Option 2 Setup)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Qwen2.5-1.5B-Instruct (qwen2.5-1.5b-instruct-q4_k_m.gguf • ~1.04 GB • Hindi + English). Download to phone Downloads folder or run ModelSetup/Download_Option2_Model.bat on PC, then tap Import Model above.',
+                          style: TextStyle(fontSize: 11, color: Colors.blueGrey),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(
+                              const ClipboardData(
+                                text:
+                                    'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
+                              ),
+                            );
+                            Navigator.of(sheetContext).pop();
+                            _message('Model download URL copied to clipboard.');
+                          },
+                          icon: const Icon(Icons.copy_outlined, size: 16),
+                          label: const Text('Copy Qwen2.5-1.5B Q4_K_M Link'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
