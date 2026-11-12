@@ -270,8 +270,9 @@ public static unsafe class NativeExports
 
         // Keyword-based retrieval — same logic as KeywordChunkRetriever but inline
         // to avoid async allocation in the native export.
+        char[] trimChars = ['.', ',', '?', '!', ':', ';', '"', '\'', '@', '#', '(', ')', '[', ']', '{', '}', '।', '-', '/'];
         var terms = question.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(x => x.Trim().ToLowerInvariant())
+            .Select(x => x.Trim(trimChars).ToLowerInvariant())
             .Where(x => x.Length >= 2)
             .Distinct()
             .ToArray();

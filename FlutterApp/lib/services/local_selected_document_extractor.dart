@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 /// Extracts only bytes explicitly supplied by the user.
 /// Supports documents (PDF, DOCX, TXT, MD, CSV, JSON) and images
 /// (JPG, JPEG, PNG, WEBP, BMP) using local offline extraction and on-device OCR.
-/// The temporary copy is private to the app and deleted after parsing settles.
+/// Temporary copies stay private to the app and are deleted as soon as parsing settles.
 class LocalSelectedDocumentExtractor {
   static const _maxBytes = 25 * 1024 * 1024;
   static const MethodChannel _channel = MethodChannel('askme/offline_model');
@@ -32,12 +32,20 @@ class LocalSelectedDocumentExtractor {
     ..._imageExtensions,
   };
 
+  /// Opens the device camera via Android MediaStore capture intent and returns
+  /// the captured JPEG bytes, or null if the user cancelled.
+  Future<Uint8List?> captureCameraImage() async {
+    return _channel.invokeMethod<Uint8List>('captureCameraImage');
+  }
+
   Future<String> extract({
     required String fileName,
     required List<int> bytes,
     required Future<void> cancelled,
   }) async {
-    if (bytes.isEmpty) throw const FormatException('The selected file is empty.');
+    if (bytes.isEmpty) {
+      throw const FormatException('The selected file is empty.');
+    }
     if (bytes.length > _maxBytes) {
       throw const FormatException('Documents larger than 25 MB are not supported.');
     }
@@ -48,6 +56,21 @@ class LocalSelectedDocumentExtractor {
       );
     }
 
+    if (_imageExtensions.contains(extension)) {
+      final parse = _extractFromImage(bytes);
+      final text = await Future.any<String>([
+        parse,
+        cancelled.then<String>((_) => throw const DocumentExtractionCancelled()),
+      ]);
+      final normalized = text.replaceAll('\u0000', '').trim();
+      if (normalized.isEmpty) {
+        throw const FormatException(
+          'No readable text was detected in the selected image.',
+        );
+      }
+      return normalized;
+    }
+
     final directory = await getTemporaryDirectory();
     final tempFile = File(p.join(
       directory.path,
@@ -55,7 +78,7 @@ class LocalSelectedDocumentExtractor {
     ));
     await tempFile.writeAsBytes(bytes, flush: true);
 
-    final parse = _parseFile(tempFile, extension, bytes);
+    final parse = _parseDocumentFile(tempFile, extension);
     try {
       final text = await Future.any<String>([
         parse,
@@ -63,28 +86,29 @@ class LocalSelectedDocumentExtractor {
       ]);
       final normalized = text.replaceAll('\u0000', '').trim();
       if (normalized.isEmpty) {
-        throw FormatException(
-          _imageExtensions.contains(extension)
-              ? 'No readable text was detected in the selected image.'
-              : 'No selectable text found. Scanned/image-only PDFs require OCR.',
+        throw const FormatException(
+          'No selectable text found. Scanned/image-only PDFs require OCR.',
         );
       }
       return normalized;
     } finally {
       unawaited(parse.then((_) async {
-        if (await tempFile.exists()) await tempFile.delete();
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
       }, onError: (Object _) async {
-        if (await tempFile.exists()) await tempFile.delete();
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
       }));
     }
   }
 
-  Future<String> _parseFile(File file, String extension, List<int> bytes) async {
-    if (_imageExtensions.contains(extension)) {
-      return _extractFromImage(bytes);
-    }
-    if (extension == '.txt' || extension == '.md' ||
-        extension == '.csv' || extension == '.json') {
+  Future<String> _parseDocumentFile(File file, String extension) async {
+    if (extension == '.txt' ||
+        extension == '.md' ||
+        extension == '.csv' ||
+        extension == '.json') {
       return file.readAsString();
     }
     final result = await TextExtractor().extractText(file.path, isUrl: false);

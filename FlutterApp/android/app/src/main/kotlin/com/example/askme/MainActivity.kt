@@ -1,17 +1,21 @@
 package com.example.askme
 
 import android.app.ActivityManager
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.core.content.FileProvider
+import java.io.ByteArrayOutputStream
 import java.util.Locale
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -27,7 +31,10 @@ import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
 class MainActivity : FlutterActivity() {
     private val channelName = "askme/offline_model"
     private val pickModelRequest = 7412
+    private val captureCameraRequest = 7414
     private var pendingResult: MethodChannel.Result? = null
+    private var pendingCameraResult: MethodChannel.Result? = null
+    private var pendingCameraFile: File? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
@@ -84,13 +91,17 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun extractTextFromImage(bytes: ByteArray, result: MethodChannel.Result) {
+        var tempFile: File? = null
         try {
-            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            if (bitmap == null) {
-                result.error("IMAGE_DECODE_FAILED", "Could not decode image bytes. Unsupported or corrupted format.", null)
+            val ocrDir = File(cacheDir, "ocr")
+            if (!ocrDir.exists() && !ocrDir.mkdirs()) {
+                result.error("OCR_IO_ERROR", "Cannot create temporary OCR directory.", null)
                 return
             }
-            val image = InputImage.fromBitmap(bitmap, 0)
+            tempFile = File(ocrDir, "ocr_${System.currentTimeMillis()}.img")
+            tempFile.writeBytes(bytes)
+            val image = InputImage.fromFilePath(this, Uri.fromFile(tempFile))
+            val capturedTempFile = tempFile
             getTextRecognizer().process(image)
                 .addOnSuccessListener { visionText ->
                     val text = visionText.text.trim()
@@ -103,14 +114,55 @@ class MainActivity : FlutterActivity() {
                 .addOnFailureListener { error ->
                     result.error("OCR_FAILED", error.message ?: "Optical Character Recognition failed.", null)
                 }
+                .addOnCompleteListener {
+                    capturedTempFile.delete()
+                }
         } catch (e: Exception) {
+            tempFile?.delete()
             result.error("OCR_EXCEPTION", e.message ?: "OCR processing error.", null)
+        }
+    }
+
+    private fun startCameraCapture(result: MethodChannel.Result) {
+        if (pendingCameraResult != null) {
+            result.error("CAMERA_BUSY", "A camera scan is already in progress.", null)
+            return
+        }
+        try {
+            val scansDir = File(cacheDir, "scans")
+            if (!scansDir.exists() && !scansDir.mkdirs()) {
+                result.error("CAMERA_IO_ERROR", "Cannot create temporary scan directory.", null)
+                return
+            }
+            val scanFile = File(scansDir, "scan_${System.currentTimeMillis()}.jpg")
+            val photoUri = FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                scanFile
+            )
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+                clipData = ClipData.newRawUri("", photoUri)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            pendingCameraResult = result
+            pendingCameraFile = scanFile
+            startActivityForResult(intent, captureCameraRequest)
+        } catch (e: Exception) {
+            pendingCameraFile?.delete()
+            pendingCameraFile = null
+            pendingCameraResult = null
+            result.error("CAMERA_UNAVAILABLE", e.message ?: "Device camera is unavailable.", null)
         }
     }
 
     override fun onDestroy() {
         pendingSpeechResult?.error("ACTIVITY_DESTROYED", "Speech activity was closed.", null)
         pendingSpeechResult = null
+        pendingCameraResult?.error("ACTIVITY_DESTROYED", "Camera activity was closed.", null)
+        pendingCameraResult = null
+        pendingCameraFile?.delete()
+        pendingCameraFile = null
         speechRecognizer?.destroy()
         textToSpeech?.stop()
         textToSpeech?.shutdown()
@@ -207,6 +259,7 @@ class MainActivity : FlutterActivity() {
                         }
                         extractTextFromImage(bytes, result)
                     }
+                    "captureCameraImage" -> startCameraCapture(result)
                     "startOfflineSpeech" -> startOfflineSpeech(call.argument<String>("language") ?: "hi-IN", result)
                     "stopOfflineSpeech" -> {
                         speechRecognizer?.cancel()
@@ -263,6 +316,40 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated in Android API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == captureCameraRequest) {
+            val callback = pendingCameraResult ?: return
+            val scanFile = pendingCameraFile
+            pendingCameraResult = null
+            pendingCameraFile = null
+            if (resultCode != RESULT_OK) {
+                scanFile?.delete()
+                callback.success(null)
+                return
+            }
+            try {
+                if (scanFile != null && scanFile.isFile && scanFile.length() > 0) {
+                    val bytes = scanFile.readBytes()
+                    scanFile.delete()
+                    callback.success(bytes)
+                    return
+                }
+                @Suppress("DEPRECATION")
+                val thumbnail = data?.extras?.get("data") as? Bitmap
+                if (thumbnail != null) {
+                    val out = ByteArrayOutputStream()
+                    thumbnail.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                    scanFile?.delete()
+                    callback.success(out.toByteArray())
+                } else {
+                    scanFile?.delete()
+                    callback.error("CAMERA_EMPTY", "Captured image was empty.", null)
+                }
+            } catch (e: Exception) {
+                scanFile?.delete()
+                callback.error("CAMERA_READ_FAILED", e.message ?: "Could not read captured image.", null)
+            }
+            return
+        }
         if (requestCode != pickModelRequest) return
         val callback = pendingResult ?: return
         pendingResult = null

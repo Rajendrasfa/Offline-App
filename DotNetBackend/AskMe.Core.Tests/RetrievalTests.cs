@@ -143,5 +143,17 @@ public class RetrievalTests
         // Single-char terms are filtered; score = 0 for all; retriever returns empty.
         Assert.Empty(chunks);
     }
+
+    [Fact]
+    public async Task RetrieveAsync_QueryWithPunctuationAndMention_FindsMatchingChunk()
+    {
+        const string content = "Electricity bill total amount due is 1450 rupees on November 20.";
+        var retriever = BuildRetriever(content);
+
+        var chunks = await retriever.RetrieveAsync(MakeDoc("bill.txt"), "@Bill, total amount?", CancellationToken.None);
+
+        Assert.NotEmpty(chunks);
+        Assert.Contains(chunks, c => c.Text.Contains("1450 rupees", StringComparison.OrdinalIgnoreCase));
+    }
 }
 
