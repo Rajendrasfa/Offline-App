@@ -51,12 +51,12 @@ class DocumentQueryResolver {
     'me', 'my', 'mine', 'you', 'your', 'we', 'our', 'they', 'their', 'it', 'its',
     'please', 'tell', 'explain', 'describe', 'summarize', 'summary', 'read',
     'give', 'show', 'find', 'check', 'write', 'make', 'create',
-    // Hindi / Hinglish conversational words
-    'kya', 'hai', 'hain', 'ho', 'hun', 'tha', 'thi', 'the',
-    'ka', 'ki', 'ke', 'ko', 'se', 'me', 'mein', 'pe', 'par', 'tak',
-    'aur', 'ya', 'bhi', 'hi', 'toh', 'to', 'nahi', 'na',
+    // Hindi / Hinglish conversational words (excluding English words already listed above)
+    'kya', 'hai', 'hain', 'ho', 'hun', 'tha', 'thi',
+    'ka', 'ki', 'ke', 'ko', 'se', 'mein', 'pe', 'par', 'tak',
+    'aur', 'ya', 'bhi', 'hi', 'toh', 'nahi', 'na',
     'batao', 'bataiye', 'bata', 'btaiye', 'samjhao', 'samjhaiye', 'likho',
-    'padho', 'dikhao', 'nikalo', 'do', 'dena', 'karo', 'kare', 'karen',
+    'padho', 'dikhao', 'nikalo', 'dena', 'karo', 'kare', 'karen',
     'mujhe', 'mera', 'meri', 'mere', 'apna', 'apni', 'apne', 'iske', 'isme',
     'kuch', 'koi', 'sab', 'ye', 'yeh', 'wo', 'woh', 'kaise', 'kab', 'kahan',
     'kyu', 'kyon', 'kitna', 'kitni', 'kitne', 'kaun', 'kiska', 'kiski',
@@ -151,7 +151,7 @@ class DocumentQueryResolver {
         }
 
         final boundaryPattern = RegExp(
-          '''(^|[\\s,.;:!?\'"()\\[\\]/\\-])($escaped)(?=\$|[\\s,.;:!?\'"()\\[\\]/\\-])''',
+          '''(^|[\\s,.;:!?'"()\\[\\]/\\-])($escaped)(?=\$|[\\s,.;:!?'"()\\[\\]/\\-])''',
           caseSensitive: false,
         );
         if (boundaryPattern.hasMatch(cleaned)) {
