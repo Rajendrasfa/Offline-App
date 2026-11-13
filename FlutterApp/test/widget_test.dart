@@ -45,4 +45,9 @@ void main() {
     expect(find.text('Copy URL'), findsNWidgets(3));
     expect(find.text('Download'), findsNWidgets(3));
   });
+
+  testWidgets('AskMeApp renders without errors', (tester) async {
+    await tester.pumpWidget(const AskMeApp());
+    expect(tester.takeException(), isNull);
+  });
 }

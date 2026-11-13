@@ -65,6 +65,9 @@ class _AskMeHomePageState extends State<AskMeHomePage>
   final List<AskMeHistoryItem> _records = [];
   final List<SavedDocument> _documents = [];
 
+  bool _isSelectionMode = false;
+  final Set<String> _selectedRequestIds = <String>{};
+
   AskScopeMode _scopeMode = AskScopeMode.auto;
   String? _pinnedDocumentId;
   String _mentionFilter = '';
@@ -873,15 +876,164 @@ class _AskMeHomePageState extends State<AskMeHomePage>
     }
   }
 
+  void _enterSelectionMode([String? initialRequestId]) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedRequestIds.clear();
+      if (initialRequestId != null) {
+        _selectedRequestIds.add(initialRequestId);
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedRequestIds.clear();
+    });
+  }
+
+  void _toggleSelectTurn(String requestId) {
+    setState(() {
+      if (_selectedRequestIds.contains(requestId)) {
+        _selectedRequestIds.remove(requestId);
+      } else {
+        _selectedRequestIds.add(requestId);
+      }
+    });
+  }
+
+  void _selectAllForDeletion() {
+    setState(() {
+      if (_selectedRequestIds.length == _records.length) {
+        _selectedRequestIds.clear();
+      } else {
+        _selectedRequestIds.addAll(_records.map((r) => r.requestId));
+      }
+    });
+  }
+
+  Future<void> _deleteTurn(String requestId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Question?'),
+        content: const Text(
+          'This question and its answer will be permanently removed from offline history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      await _history.delete(requestId);
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _records.removeWhere((r) => r.requestId == requestId);
+        _selectedRequestIds.remove(requestId);
+        if (_records.isEmpty) {
+          _isSelectionMode = false;
+        }
+      });
+      _message('Question deleted.');
+    }
+  }
+
+  Future<void> _confirmDeleteSelected() async {
+    if (_selectedRequestIds.isEmpty) {
+      return;
+    }
+    final count = _selectedRequestIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete $count Question${count > 1 ? 's' : ''}?'),
+        content: Text(
+          'Selected $count question${count > 1 ? 's and their answers' : ' and answer'} will be removed from history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    final toDelete = Set<String>.from(_selectedRequestIds);
+    try {
+      await _history.deleteMany(toDelete);
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _records.removeWhere((r) => toDelete.contains(r.requestId));
+        _selectedRequestIds.clear();
+        _isSelectionMode = false;
+      });
+      _message('$count question${count > 1 ? 's' : ''} deleted.');
+    }
+  }
+
   Future<void> _clearHistory() async {
     if (_busy) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear All Conversations?'),
+        content: const Text(
+          'All saved questions and answers in offline chat history will be permanently erased.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
       return;
     }
     await _history.clearAll();
     if (!mounted) {
       return;
     }
-    setState(() => _records.clear());
+    setState(() {
+      _records.clear();
+      _selectedRequestIds.clear();
+      _isSelectionMode = false;
+    });
     _message('Conversation cleared.');
   }
 
@@ -1211,46 +1363,80 @@ class _AskMeHomePageState extends State<AskMeHomePage>
     final modelReady = _modelInfo != null;
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'AskMe',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        leading: _isSelectionMode
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'Cancel selection',
+                onPressed: _exitSelectionMode,
+              )
+            : null,
+        title: Text(
+          _isSelectionMode
+              ? '${_selectedRequestIds.length} Selected'
+              : 'AskMe',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          TextButton.icon(
-            onPressed: _openModelSettingsSheet,
-            icon: Icon(
-              modelReady ? Icons.check_circle_outline : Icons.memory,
-              size: 18,
-              color: modelReady ? Colors.green : Colors.deepOrange,
-            ),
-            label: Text(
-              modelReady ? 'Model Ready' : 'Import Model',
-              style: TextStyle(
-                fontSize: 12,
-                color: modelReady ? Colors.green.shade700 : Colors.deepOrange,
+          if (_isSelectionMode) ...[
+            IconButton(
+              tooltip: _selectedRequestIds.length == _records.length
+                  ? 'Deselect all'
+                  : 'Select all',
+              onPressed: _selectAllForDeletion,
+              icon: Icon(
+                _selectedRequestIds.length == _records.length
+                    ? Icons.deselect
+                    : Icons.select_all,
               ),
             ),
-          ),
-          if (_records.isNotEmpty)
             IconButton(
-              tooltip: 'Clear conversation',
-              onPressed: _busy ? null : _clearHistory,
-              icon: const Icon(Icons.delete_sweep_outlined),
+              tooltip: 'Delete selected',
+              onPressed: _selectedRequestIds.isEmpty ? null : _confirmDeleteSelected,
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
             ),
-          IconButton(
-            tooltip: 'Privacy and status',
-            onPressed: () => showAboutDialog(
-              context: context,
-              applicationName: 'AskMe',
-              applicationVersion: '0.3.0',
-              children: const [
-                Text(
-                  '100% on-device offline AI assistant. No cloud fallback or internet permission is used. Scanned/uploaded documents and chat history are AES-256-GCM encrypted locally.',
+          ] else ...[
+            TextButton.icon(
+              onPressed: _openModelSettingsSheet,
+              icon: Icon(
+                modelReady ? Icons.check_circle_outline : Icons.memory,
+                size: 18,
+                color: modelReady ? Colors.green : Colors.deepOrange,
+              ),
+              label: Text(
+                modelReady ? 'Model Ready' : 'Import Model',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: modelReady ? Colors.green.shade700 : Colors.deepOrange,
                 ),
-              ],
+              ),
             ),
-            icon: const Icon(Icons.privacy_tip_outlined),
-          ),
+            if (_records.isNotEmpty) ...[
+              IconButton(
+                tooltip: 'Select questions',
+                onPressed: _busy ? null : () => _enterSelectionMode(),
+                icon: const Icon(Icons.checklist_outlined),
+              ),
+              IconButton(
+                tooltip: 'Clear conversation',
+                onPressed: _busy ? null : _clearHistory,
+                icon: const Icon(Icons.delete_sweep_outlined),
+              ),
+            ],
+            IconButton(
+              tooltip: 'Privacy and status',
+              onPressed: () => showAboutDialog(
+                context: context,
+                applicationName: 'AskMe',
+                applicationVersion: '0.3.0',
+                children: const [
+                  Text(
+                    '100% on-device offline AI assistant. No cloud fallback or internet permission is used. Scanned/uploaded documents and chat history are AES-256-GCM encrypted locally.',
+                  ),
+                ],
+              ),
+              icon: const Icon(Icons.privacy_tip_outlined),
+            ),
+          ],
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -1479,7 +1665,9 @@ class _AskMeHomePageState extends State<AskMeHomePage>
   Widget _buildChatTurn(AskMeHistoryItem item) {
     final isPending = item.status == 'Pending';
     final isCompleted = item.status == 'Completed' && item.answer != null;
-    return Column(
+    final isSelected = _selectedRequestIds.contains(item.requestId);
+
+    final turnWidget = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Align(
@@ -1496,9 +1684,62 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                 bottomRight: Radius.circular(4),
               ),
             ),
-            child: Text(
-              item.question,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                SelectableText(
+                  item.question,
+                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: item.question));
+                        _message('Question copied to clipboard.');
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.copy_outlined, size: 14, color: Colors.white70),
+                            SizedBox(width: 4),
+                            Text(
+                              'Copy',
+                              style: TextStyle(color: Colors.white70, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: isPending && _busy
+                          ? null
+                          : () => _deleteTurn(item.requestId),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.delete_outline, size: 14, color: Colors.white70),
+                            SizedBox(width: 4),
+                            Text(
+                              'Delete',
+                              style: TextStyle(color: Colors.white70, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
@@ -1569,7 +1810,7 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                         visualDensity: VisualDensity.compact,
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: item.answer!));
-                          _message('Copied to clipboard.');
+                          _message('Answer copied to clipboard.');
                         },
                         icon: const Icon(Icons.copy_outlined, size: 18),
                       ),
@@ -1579,21 +1820,71 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                         onPressed: () => _speak(item.answer!),
                         icon: const Icon(Icons.volume_up_outlined, size: 18),
                       ),
+                      IconButton(
+                        tooltip: 'Delete question & answer',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _deleteTurn(item.requestId),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: Colors.blueGrey,
+                        ),
+                      ),
                     ],
                   ),
                 ] else
-                  Text(
-                    item.status,
-                    style: const TextStyle(
-                      color: Colors.deepOrange,
-                      fontSize: 13,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.status,
+                          style: const TextStyle(
+                            color: Colors.deepOrange,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Delete turn',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _deleteTurn(item.requestId),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: Colors.blueGrey,
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
           ),
         ),
       ],
+    );
+
+    if (_isSelectionMode) {
+      return InkWell(
+        onTap: () => _toggleSelectTurn(item.requestId),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Checkbox(
+                value: isSelected,
+                onChanged: (_) => _toggleSelectTurn(item.requestId),
+              ),
+              Expanded(child: turnWidget),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onLongPress: () => _enterSelectionMode(item.requestId),
+      child: turnWidget,
     );
   }
 

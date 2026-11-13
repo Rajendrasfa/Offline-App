@@ -72,5 +72,21 @@ class SecureHistoryStore {
     });
   }
 
+  Future<void> delete(String requestId) {
+    return _store.serialized(() async {
+      final items = await readAll();
+      items.removeWhere((e) => e.requestId == requestId);
+      await writeAll(items);
+    });
+  }
+
+  Future<void> deleteMany(Set<String> requestIds) {
+    return _store.serialized(() async {
+      final items = await readAll();
+      items.removeWhere((e) => requestIds.contains(e.requestId));
+      await writeAll(items);
+    });
+  }
+
   Future<void> clearAll() => _store.clear();
 }

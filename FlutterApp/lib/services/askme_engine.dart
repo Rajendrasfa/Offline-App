@@ -43,6 +43,28 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
 
   static const _channel = MethodChannel('askme/offline_model');
   static const int _maxTotalDocChars = 20000;
+  static const List<String> _stopTokens = [
+    '<|im_end|>',
+    '<|endoftext|>',
+    '<|im_start|>',
+    '<|eot_id|>',
+    '</s>',
+    '\nUSER:',
+    '\nUser:',
+    '\nuser:',
+    '\n\nUSER',
+    '\n\nUser',
+    '\n\nuser',
+    '\nASSISTANT:',
+    '\nAssistant:',
+    '\nassistant:',
+    '\nASSISBATOR:',
+    '\nASSISBATION:',
+    '\nQ:',
+    '\nQuestion:',
+    '\n\nQ:',
+    '\n\nQuestion:',
+  ];
 
   final LlamaController _controller = LlamaController();
   final OfflineBackendHost _backendHost;
@@ -80,12 +102,14 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
           'Import a compatible GGUF model first.',
         );
       }
-      final totalRam = (profile?['totalRamBytes'] as num?)?.toInt() ?? 0;
       final cores = (profile?['cpuCores'] as num?)?.toInt() ?? 2;
-      final context = totalRam >= 6 * 1024 * 1024 * 1024 ? 4096 : 2048;
+      // Clamp to 2-4 threads on mobile to avoid thread synchronization bottlenecks
+      // and severe thermal throttling across big/little cores (e.g. Snapdragon 695).
+      // Keep contextSize at 2048 for optimal prompt evaluation latency and low RAM footprint.
+      const context = 2048;
       await _controller.loadModel(
         modelPath: modelPath,
-        threads: cores.clamp(2, 6).toInt(),
+        threads: cores.clamp(2, 4).toInt(),
         contextSize: context,
       );
       _loaded = true;
@@ -187,33 +211,47 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
       final prompt = StringBuffer();
       if (docSections.isEmpty) {
         prompt
+          ..write('<|im_start|>system\n')
           ..writeln(
-            'You are AskMe, a helpful private offline AI assistant (similar to Gemini and ChatGPT).',
+            'You are AskMe, a helpful, precise, and concise offline AI assistant (similar to Gemini and ChatGPT).',
           )
           ..writeln(
-            'Answer the user clearly, helpfully, and accurately in the same language used by the user (Hindi, Hinglish, or English).',
+            'Strict Rules:\n'
+            '1. Give a direct, concise, and helpful answer (1 to 3 sentences).\n'
+            '2. Reply in the same language used by the user (Hindi, Hinglish, or English).\n'
+            '3. Stop immediately after answering. Never simulate fake follow-up dialogues, user questions, or extra text.',
           )
-          ..writeln();
+          ..write('<|im_end|>\n')
+          ..write('<|im_start|>user\n')
+          ..writeln(question)
+          ..write('<|im_end|>\n')
+          ..write('<|im_start|>assistant\n');
       } else {
         prompt
+          ..write('<|im_start|>system\n')
           ..writeln(
             'You are AskMe, a private offline document AI assistant. Reply in the language used by the user (Hindi, Hinglish, or English).',
           )
           ..writeln(
-            'Answer based on the supplied named document(s) below and mention the document name when helpful. If the requested detail is absent in the document(s), clearly say so.',
+            'Strict Rules:\n'
+            '1. Answer ONLY from the provided named document(s) below in 1 or 2 concise sentences.\n'
+            '2. Mention the document name when helpful.\n'
+            '3. If the requested detail is not found in the documents, state clearly: "This information is not mentioned in the document."\n'
+            '4. Stop immediately after answering. Never generate fake follow-up questions, simulated dialogue, or extra conversation.',
           )
-          ..writeln();
+          ..write('<|im_end|>\n')
+          ..write('<|im_start|>user\n');
         for (final section in docSections) {
           prompt
             ..writeln('DOCUMENT [${section.name}]:')
             ..writeln(section.text)
-            ..writeln('END DOCUMENT [${section.name}]')
-            ..writeln();
+            ..writeln('END DOCUMENT [${section.name}]\n');
         }
+        prompt
+          ..writeln('Question: $question')
+          ..write('<|im_end|>\n')
+          ..write('<|im_start|>assistant\n');
       }
-      prompt
-        ..writeln('USER: $question')
-        ..write('ASSISTANT:');
 
       final done = Completer<void>();
       final output = StringBuffer();
@@ -221,12 +259,29 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
       _generation = _controller
           .generate(
             prompt: prompt.toString(),
-            maxTokens: 768,
-            temperature: docSections.isEmpty ? 0.6 : 0.3,
+            maxTokens: 256,
+            temperature: docSections.isEmpty ? 0.4 : 0.1,
             topP: 0.9,
           )
           .listen(
-            output.write,
+            (chunk) {
+              output.write(chunk);
+              final currentText = output.toString();
+              for (final stopToken in _stopTokens) {
+                final idx = currentText.indexOf(stopToken);
+                if (idx >= 0) {
+                  final trimmed = currentText.substring(0, idx).trim();
+                  output.clear();
+                  output.write(trimmed);
+                  unawaited(_controller.stop());
+                  unawaited(_generation?.cancel());
+                  if (!done.isCompleted) {
+                    done.complete();
+                  }
+                  break;
+                }
+              }
+            },
             onError: (Object error, StackTrace stack) {
               if (!done.isCompleted) {
                 done.completeError(error, stack);
@@ -244,7 +299,13 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
       if (cancellationRequested) {
         throw const OfflineRequestCancelled();
       }
-      final answerText = output.toString().trim();
+      var answerText = output.toString().trim();
+      for (final stopToken in _stopTokens) {
+        final idx = answerText.indexOf(stopToken);
+        if (idx >= 0) {
+          answerText = answerText.substring(0, idx).trim();
+        }
+      }
       if (answerText.isEmpty) {
         throw StateError('The local model returned an empty response.');
       }
