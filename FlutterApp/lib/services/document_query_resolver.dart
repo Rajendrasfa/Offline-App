@@ -59,19 +59,26 @@ class DocumentQueryResolver {
     'padho', 'dikhao', 'nikalo', 'dena', 'karo', 'kare', 'karen',
     'mujhe', 'mera', 'meri', 'mere', 'apna', 'apni', 'apne', 'iske', 'isme',
     'kuch', 'koi', 'sab', 'ye', 'yeh', 'wo', 'woh', 'kaise', 'kab', 'kahan',
-    'kyu', 'kyon', 'kitna', 'kitni', 'kitne', 'kaun', 'kiska', 'kiski',
+    'kyu', 'kyon', 'kitna', 'kitni', 'kitne', 'kitane', 'kaun', 'kiska', 'kiski',
     'document', 'doc', 'file', 'page', 'scan', 'bare', 'baare',
+    'gaye', 'gaya', 'gayi', 'hua', 'hue', 'hui', 'huye',
+    'raha', 'rahe', 'rahi', 'hota', 'hote', 'hoti',
+    'wala', 'wali', 'wale', 'karna', 'karta', 'karti', 'karte',
   };
 
   static const Set<String> _documentInquiryKeywords = {
     'company', 'website', 'site', 'url', 'address', 'pata', 'name', 'naam',
-    'date', 'tarikh', 'dinank', 'year', 'saal', 'time', 'samay', 'amount',
-    'total', 'bill', 'consumer', 'meter', 'reading', 'payment', 'paid', 'due',
-    'number', 'no', 'id', 'phone', 'mobile', 'email', 'contact', 'sampark',
-    'details', 'detail', 'summary', 'content', 'text', 'likha', 'kiska',
-    'kiski', 'kiske', 'kisne', 'invoice', 'receipt', 'certificate',
-    'document', 'doc', 'file', 'page', 'scan', 'report',
-    'organisation', 'organization', 'office', 'headquarters', 'branch',
+    'date', 'tarikh', 'dinank', 'year', 'years', 'saal', 'sal', 'varsh',
+    'time', 'samay', 'amount', 'total', 'bill', 'consumer', 'meter',
+    'reading', 'payment', 'paid', 'due', 'number', 'no', 'id', 'phone',
+    'mobile', 'email', 'contact', 'sampark', 'details', 'detail', 'summary',
+    'content', 'text', 'likha', 'kiska', 'kiski', 'kiske', 'kisne',
+    'invoice', 'receipt', 'certificate', 'document', 'doc', 'file', 'page',
+    'scan', 'report', 'organisation', 'organization', 'office',
+    'headquarters', 'branch', 'anniversary', 'aniversary', 'anniv', 'decade',
+    'holiday', 'holidays', 'chhutti', 'chhuttiya', 'tyohar', 'calendar',
+    'month', 'mahina', 'sfa', 'sfatechgroup', 'techgroup', 'celebrating',
+    'journey', 'edition',
   };
 
   static ResolvedDocuments resolve({
@@ -119,13 +126,27 @@ class DocumentQueryResolver {
       );
     }
 
-    // Step C: If there is only 1 document in the vault and the user asks a document-related
-    // question (e.g. "what is company name", "website address"), target that document.
+    // Step C: Fallback for document inquiry intent (e.g. "what is company name", "website address", "sfatechgroup ko kitane sal ho gaye")
     final terms = _extractTerms(trimmed);
     final hasInquiryIntent = terms.any(_documentInquiryKeywords.contains);
-    if (savedDocuments.length == 1 && hasInquiryIntent) {
+    if (savedDocuments.isNotEmpty && hasInquiryIntent) {
+      final scoredFallback = <({SavedDocument doc, int score})>[];
+      for (final doc in savedDocuments) {
+        final haystack =
+            '${doc.name.toLowerCase()}\n${doc.extractedText.toLowerCase()}';
+        var score = 0;
+        for (final term in terms) {
+          if (haystack.contains(term)) score += 2;
+        }
+        if (haystack.contains('www.') || haystack.contains('.com')) score += 1;
+        if (haystack.contains('pvt') ||
+            haystack.contains('ltd') ||
+            haystack.contains('sfa')) score += 1;
+        scoredFallback.add((doc: doc, score: score));
+      }
+      scoredFallback.sort((a, b) => b.score.compareTo(a.score));
       return ResolvedDocuments(
-        documents: [savedDocuments.first],
+        documents: [scoredFallback.first.doc],
         reason: DocumentMatchReason.byRelevance,
         cleanedQuestion: trimmed,
       );
@@ -207,10 +228,56 @@ class DocumentQueryResolver {
       return const [];
     }
 
-    final hasWebsiteIntent = terms.any((t) => t == 'website' || t == 'site' || t == 'url' || t == 'link');
-    final hasCompanyIntent = terms.any((t) => t == 'company' || t == 'org' || t == 'organization' || t == 'firm' || t == 'business');
+    final hasWebsiteIntent = terms.any(
+      (t) => t == 'website' || t == 'site' || t == 'url' || t == 'link',
+    );
+    final hasCompanyIntent = terms.any(
+      (t) =>
+          t == 'company' ||
+          t == 'org' ||
+          t == 'organization' ||
+          t == 'firm' ||
+          t == 'business',
+    );
+    final hasAnniversaryIntent = terms.any(
+      (t) =>
+          t.contains('anivers') ||
+          t.contains('annivers') ||
+          t == 'sal' ||
+          t == 'saal' ||
+          t == 'year' ||
+          t == 'years' ||
+          t == 'decade' ||
+          t == 'varsh',
+    );
+    final hasCalendarIntent = terms.any(
+      (t) =>
+          t.contains('calendar') ||
+          t.contains('holiday') ||
+          t == 'chhutti' ||
+          t == 'chhuttiya' ||
+          t == 'tyohar' ||
+          t == 'january' ||
+          t == 'february' ||
+          t == 'march' ||
+          t == 'april' ||
+          t == 'may' ||
+          t == 'june' ||
+          t == 'july' ||
+          t == 'august' ||
+          t == 'september' ||
+          t == 'october' ||
+          t == 'november' ||
+          t == 'december' ||
+          t == 'diwali' ||
+          t == 'holi' ||
+          t == 'dussehra' ||
+          t == 'eid',
+    );
+    final hasEntityIntent = terms.any(
+      (t) => t == 'sfa' || t.contains('sfatech') || t.contains('sfatechgroup'),
+    );
 
-    final minHitsRequired = (terms.length / 2).ceil();
     final scored = <({SavedDocument doc, int score})>[];
 
     for (final doc in savedDocuments) {
@@ -219,7 +286,19 @@ class DocumentQueryResolver {
       var hits = 0;
       for (final term in terms) {
         if (haystack.contains(term)) {
-          hits++;
+          hits += (term.length >= 5) ? 3 : 2;
+        } else {
+          // Typo / Stem tolerances
+          if (term.contains('anivers') && haystack.contains('annivers')) {
+            hits += 3;
+          }
+          if ((term == 'sal' || term == 'saal') &&
+              (haystack.contains('year') ||
+                  haystack.contains('years') ||
+                  haystack.contains('decade') ||
+                  RegExp(r'\b20\d\d\s*-\s*20\d\d\b').hasMatch(haystack))) {
+            hits += 3;
+          }
         }
       }
 
@@ -242,10 +321,35 @@ class DocumentQueryResolver {
               haystack.contains('the sfa'))) {
         hits += 2;
       }
+      if (hasAnniversaryIntent &&
+          (haystack.contains('anniversary') ||
+              haystack.contains('decade') ||
+              haystack.contains('years') ||
+              haystack.contains('10th') ||
+              haystack.contains('edition'))) {
+        hits += 3;
+      }
+      if (hasCalendarIntent &&
+          (haystack.contains('calendar') ||
+              haystack.contains('holiday') ||
+              haystack.contains('holidays') ||
+              haystack.contains('january') ||
+              haystack.contains('diwali') ||
+              haystack.contains('2026'))) {
+        hits += 3;
+      }
+      if (hasEntityIntent &&
+          (haystack.contains('sfa') || haystack.contains('sfatechgroup'))) {
+        hits += 3;
+      }
 
-      if (hits >= minHitsRequired) {
+      if (hits >= 2) {
         scored.add((doc: doc, score: hits));
       }
+    }
+
+    if (scored.isEmpty) {
+      return const [];
     }
 
     scored.sort((a, b) => b.score.compareTo(a.score));

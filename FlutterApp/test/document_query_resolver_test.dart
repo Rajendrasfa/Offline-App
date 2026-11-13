@@ -138,4 +138,60 @@ void main() {
     );
     expect(resolvedCompany.documents.map((d) => d.id), ['scan-1']);
   });
+
+  test('Auto mode correctly discriminates between 10th Anniversary Notebook and 2026 Calendar', () {
+    final userScans = [
+      SavedDocument(
+        id: 'scan-anniv',
+        name: 'Scan 13-11 10:35',
+        originalFileName: 'scan_20261113_1035.jpg',
+        sourceType: 'scan',
+        extractedText:
+            'Sta\nCMMI-3 DEVY IVAT\nThe SFA\nA Special 10th Anniversary Edition\nwww.sfatechgroup.com\n10 Years\nCelebrating A Decade of Our Successful Journey\n2015-2025',
+        createdAt: DateTime(2026, 11, 13, 10, 35),
+      ),
+      SavedDocument(
+        id: 'scan-calendar',
+        name: 'Scan 13-11 14:39',
+        originalFileName: 'scan_20261113_1439.jpg',
+        sourceType: 'scan',
+        extractedText:
+            'sfa Technologies Pvt. Ltd.\nCMMI-3 DEV | VRT\n2026 CALENDAR\nHolidays:\n26 Jan, Mon - Republic Day\n04 Mar, Wed - Holi\n20 Mar, Fri - Idul fitr\n15 Aug, Sat - Independence Day\n28 Aug, Fri - Raksha Bandhan\n02 Oct, Fri - Gandhi Jayanti\n20 Oct, Tue - Dussehra\n08 Nov, Sun - Diwali\n09 Nov, Mon - Post Diwali\n10 Nov, Tue - Bhai-Duj\n25 Dec, Fri - Christmas\nwww.sfatechgroup.com',
+        createdAt: DateTime(2026, 11, 13, 14, 39),
+      ),
+    ];
+
+    // Query 1: Hindi query asking how many years sfatechgroup has completed
+    final resolvedYears = DocumentQueryResolver.resolve(
+      question: 'sfatechgroup ko kitane sal ho gaye hai',
+      savedDocuments: userScans,
+      mode: AskScopeMode.auto,
+    );
+    expect(resolvedYears.documents.first.id, 'scan-anniv');
+
+    // Query 2: English query with slight typo ('aniversary' with single n)
+    final resolvedAniv = DocumentQueryResolver.resolve(
+      question: 'what is number of aniversary of SFATECHGROUP',
+      savedDocuments: userScans,
+      mode: AskScopeMode.auto,
+    );
+    expect(resolvedAniv.documents.first.id, 'scan-anniv');
+
+    // Query 3: Calendar holiday query
+    final resolvedHoliday = DocumentQueryResolver.resolve(
+      question: 'Diwali holiday kab hai in 2026 calendar',
+      savedDocuments: userScans,
+      mode: AskScopeMode.auto,
+    );
+    expect(resolvedHoliday.documents.first.id, 'scan-calendar');
+
+    // Query 4: Unrelated general question -> general mode
+    final resolvedGeneral = DocumentQueryResolver.resolve(
+      question: 'Explain how photosynthesis works in green plants',
+      savedDocuments: userScans,
+      mode: AskScopeMode.auto,
+    );
+    expect(resolvedGeneral.documents, isEmpty);
+    expect(resolvedGeneral.reason, DocumentMatchReason.general);
+  });
 }

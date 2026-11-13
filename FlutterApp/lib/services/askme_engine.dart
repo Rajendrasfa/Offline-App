@@ -247,8 +247,9 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
             'Strict Rules:\n'
             '1. Answer ONLY from the provided named document(s) below in 1 or 2 concise sentences.\n'
             '2. Mention the document name when helpful.\n'
-            '3. If the requested detail is not found in the documents, state clearly: "This information is not mentioned in the document."\n'
-            '4. Stop immediately after answering. Never generate fake follow-up questions, simulated dialogue, or extra conversation.',
+            '3. When the user asks in Hindi, Hinglish, or English about years/duration (e.g. "kitane sal ho gaye", "number of anniversary", "kab se kab tak"), holidays, or dates, extract the exact facts and figures from the document text (e.g., 10 Years / 10th Anniversary / 2015-2025 / 1 Decade).\n'
+            '4. If the requested detail is not found in the documents, state clearly: "This information is not mentioned in the document."\n'
+            '5. Stop immediately after answering. Never generate fake follow-up questions, simulated dialogue, or extra conversation.',
           )
           ..write('<|im_end|>\n')
           ..write('<|im_start|>user\n');
