@@ -39,6 +39,8 @@ class DocumentQueryResolver {
     r'''[\s,.;:!?'"()\[\]{}/\\@#$%^&*+=<>|~`\-।]+''',
   );
 
+  static final RegExp _yearRangePattern = RegExp(r'\b20\d\d\s*-\s*20\d\d\b');
+
   static const Set<String> _stopwords = {
     // English common words
     'the', 'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
@@ -296,7 +298,7 @@ class DocumentQueryResolver {
               (haystack.contains('year') ||
                   haystack.contains('years') ||
                   haystack.contains('decade') ||
-                  RegExp(r'\b20\d\d\s*-\s*20\d\d\b').hasMatch(haystack))) {
+                  _yearRangePattern.hasMatch(haystack))) {
             hits += 3;
           }
         }
