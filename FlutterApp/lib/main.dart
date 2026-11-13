@@ -1709,8 +1709,10 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    const Icon(Icons.access_time, size: 12, color: Colors.white70),
+                    const SizedBox(width: 3),
                     Text(
-                      _formatTime(item.createdAt),
+                      'Asked: ${_formatTime(item.createdAt)}',
                       style: const TextStyle(color: Colors.white70, fontSize: 11),
                     ),
                     const SizedBox(width: 8),
@@ -1801,7 +1803,6 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                 ],
                 if (isPending)
                   Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const SizedBox(
                         width: 14,
@@ -1809,15 +1810,26 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                       const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _activeRequestId == item.requestId
+                              ? _activeStatus
+                              : (item.sources.isNotEmpty
+                                  ? 'Reading ${item.sources.join(", ")}…'
+                                  : 'Thinking locally…'),
+                          style: const TextStyle(
+                            color: Colors.blueGrey,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.access_time, size: 11, color: Colors.blueGrey),
+                      const SizedBox(width: 3),
                       Text(
-                        _activeRequestId == item.requestId
-                            ? _activeStatus
-                            : (item.sources.isNotEmpty
-                                ? 'Reading ${item.sources.join(", ")}…'
-                                : 'Thinking locally…'),
-                        style: const TextStyle(
-                          color: Colors.blueGrey,
-                          fontSize: 13,
+                        _formatTime(item.createdAt),
+                        style: TextStyle(
+                          color: Colors.blueGrey.shade400,
+                          fontSize: 11,
                         ),
                       ),
                     ],
@@ -1831,11 +1843,14 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Icon(Icons.access_time, size: 12, color: Colors.blueGrey.shade500),
+                      const SizedBox(width: 3),
                       Text(
-                        _formatTime(item.answeredAt ?? item.createdAt),
+                        'Answered: ${_formatTime(item.answeredAt ?? item.createdAt)}',
                         style: TextStyle(
-                          color: Colors.blueGrey.shade400,
+                          color: Colors.blueGrey.shade600,
                           fontSize: 11,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -1882,12 +1897,19 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                             ),
                             if (item.answeredAt != null) ...[
                               const SizedBox(height: 2),
-                              Text(
-                                _formatTime(item.answeredAt!),
-                                style: TextStyle(
-                                  color: Colors.blueGrey.shade400,
-                                  fontSize: 10,
-                                ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.access_time, size: 11, color: Colors.blueGrey.shade400),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'At: ${_formatTime(item.answeredAt!)}',
+                                    style: TextStyle(
+                                      color: Colors.blueGrey.shade400,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ],
