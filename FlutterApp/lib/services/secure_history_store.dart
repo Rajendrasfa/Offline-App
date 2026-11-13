@@ -8,6 +8,7 @@ class AskMeHistoryItem {
     required this.createdAt,
     this.answer,
     this.sources = const [],
+    this.answeredAt,
   });
 
   final String requestId;
@@ -16,6 +17,7 @@ class AskMeHistoryItem {
   final DateTime createdAt;
   final String? answer;
   final List<String> sources;
+  final DateTime? answeredAt;
 
   Map<String, Object?> toJson() => {
         'id': requestId,
@@ -24,6 +26,7 @@ class AskMeHistoryItem {
         'createdAt': createdAt.toIso8601String(),
         'answer': answer,
         if (sources.isNotEmpty) 'sources': sources,
+        if (answeredAt != null) 'answeredAt': answeredAt!.toIso8601String(),
       };
 
   factory AskMeHistoryItem.fromJson(Map<String, dynamic> j) => AskMeHistoryItem(
@@ -36,6 +39,9 @@ class AskMeHistoryItem {
                 ?.map((e) => e.toString())
                 .toList() ??
             const [],
+        answeredAt: j['answeredAt'] != null
+            ? DateTime.tryParse(j['answeredAt'] as String)
+            : null,
       );
 }
 

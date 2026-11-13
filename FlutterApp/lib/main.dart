@@ -80,6 +80,14 @@ class _AskMeHomePageState extends State<AskMeHomePage>
   Completer<void>? _documentCancel;
   String? _activeRequestId;
   String _status = 'Offline mode';
+  String _activeStatus = 'Thinking locally…';
+
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
 
   @override
   void initState() {
@@ -743,9 +751,10 @@ class _AskMeHomePageState extends State<AskMeHomePage>
       _busy = true;
       _activeRequestId = id;
       _showMentionBar = false;
-      _status = selectedDocs.isEmpty
+      _activeStatus = selectedDocs.isEmpty
           ? 'Thinking locally…'
           : 'Reading ${sourceNames.join(", ")}…';
+      _status = _activeStatus;
     });
     await _persist(item);
 
@@ -767,6 +776,7 @@ class _AskMeHomePageState extends State<AskMeHomePage>
         createdAt: item.createdAt,
         answer: result.text,
         sources: result.sources.isNotEmpty ? result.sources : sourceNames,
+        answeredAt: DateTime.now(),
       );
       await _replace(completed);
     } on OfflineEngineUnavailable {
@@ -779,6 +789,7 @@ class _AskMeHomePageState extends State<AskMeHomePage>
         status: 'Setup required — offline model missing',
         createdAt: item.createdAt,
         sources: sourceNames,
+        answeredAt: DateTime.now(),
       );
       await _replace(failed);
       _message(
@@ -795,9 +806,10 @@ class _AskMeHomePageState extends State<AskMeHomePage>
           status: 'Failed: ${e.code}',
           createdAt: item.createdAt,
           sources: sourceNames,
+          answeredAt: DateTime.now(),
         ),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted || !_cancellation.isCurrent(lease.id)) {
         return;
       }
@@ -805,9 +817,10 @@ class _AskMeHomePageState extends State<AskMeHomePage>
         AskMeHistoryItem(
           requestId: id,
           question: rawText,
-          status: 'Failed',
+          status: 'Failed: $e',
           createdAt: item.createdAt,
           sources: sourceNames,
+          answeredAt: DateTime.now(),
         ),
       );
     } finally {
@@ -862,6 +875,7 @@ class _AskMeHomePageState extends State<AskMeHomePage>
         status: 'Cancelled',
         createdAt: old.createdAt,
         sources: old.sources,
+        answeredAt: DateTime.now(),
       ),
     );
     if (mounted) {
@@ -1695,6 +1709,11 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Text(
+                      _formatTime(item.createdAt),
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                    const SizedBox(width: 8),
                     InkWell(
                       borderRadius: BorderRadius.circular(4),
                       onTap: () {
@@ -1791,8 +1810,15 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _status,
-                        style: const TextStyle(color: Colors.blueGrey),
+                        _activeRequestId == item.requestId
+                            ? _activeStatus
+                            : (item.sources.isNotEmpty
+                                ? 'Reading ${item.sources.join(", ")}…'
+                                : 'Thinking locally…'),
+                        style: const TextStyle(
+                          color: Colors.blueGrey,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   )
@@ -1805,6 +1831,14 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Text(
+                        _formatTime(item.answeredAt ?? item.createdAt),
+                        style: TextStyle(
+                          color: Colors.blueGrey.shade400,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
                       IconButton(
                         tooltip: 'Copy answer',
                         visualDensity: VisualDensity.compact,
@@ -1836,12 +1870,27 @@ class _AskMeHomePageState extends State<AskMeHomePage>
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          item.status,
-                          style: const TextStyle(
-                            color: Colors.deepOrange,
-                            fontSize: 13,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.status,
+                              style: const TextStyle(
+                                color: Colors.deepOrange,
+                                fontSize: 13,
+                              ),
+                            ),
+                            if (item.answeredAt != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                _formatTime(item.answeredAt!),
+                                style: TextStyle(
+                                  color: Colors.blueGrey.shade400,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       IconButton(

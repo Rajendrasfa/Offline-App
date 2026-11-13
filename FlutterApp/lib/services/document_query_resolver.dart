@@ -108,7 +108,27 @@ class DocumentQueryResolver {
       );
     }
 
-    // Step C: Unrelated to saved docs -> Gemini/ChatGPT style general response.
+    // Step C: When in Auto mode with saved documents present, include the most
+    // recent document(s) (up to 2 docs, <= 20000 chars total) so semantic questions
+    // like "what is company name", "website address", "kiske baare me hai",
+    // "phone number kya hai" are answered directly from the document rather than
+    // giving generic textbook definitions.
+    if (savedDocuments.isNotEmpty) {
+      final candidates = savedDocuments.take(2).toList();
+      final totalLen = candidates.fold<int>(
+        0,
+        (sum, d) => sum + d.extractedText.length,
+      );
+      if (totalLen <= 20000) {
+        return ResolvedDocuments(
+          documents: candidates,
+          reason: DocumentMatchReason.byRelevance,
+          cleanedQuestion: trimmed,
+        );
+      }
+    }
+
+    // Step D: Unrelated to saved docs -> Gemini/ChatGPT style general response.
     return ResolvedDocuments(
       documents: const [],
       reason: DocumentMatchReason.general,

@@ -126,6 +126,17 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
     String question,
     int index,
   ) async {
+    // If the document already has extracted text and it is under 12,000 characters
+    // (such as OCR camera scans, uploaded text/PDF pages), use it directly.
+    // This avoids redundant NativeAOT IPC calls, MethodChannel overhead, and keyword filtering loss.
+    if (document.extractedText != null &&
+        document.extractedText!.trim().isNotEmpty) {
+      final text = document.extractedText!.trim();
+      if (text.length <= 12000) {
+        return text;
+      }
+    }
+
     String? backendContext;
     try {
       final reqId = await _backendHost.startRequest();
@@ -271,14 +282,19 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
                 final idx = currentText.indexOf(stopToken);
                 if (idx >= 0) {
                   final trimmed = currentText.substring(0, idx).trim();
-                  output.clear();
-                  output.write(trimmed);
-                  unawaited(_controller.stop());
-                  unawaited(_generation?.cancel());
-                  if (!done.isCompleted) {
-                    done.complete();
+                  if (trimmed.isNotEmpty ||
+                      stopToken == '<|im_end|>' ||
+                      stopToken == '<|endoftext|>' ||
+                      stopToken == '</s>') {
+                    output.clear();
+                    output.write(trimmed);
+                    unawaited(_controller.stop());
+                    unawaited(_generation?.cancel());
+                    if (!done.isCompleted) {
+                      done.complete();
+                    }
+                    break;
                   }
-                  break;
                 }
               }
             },
@@ -307,7 +323,9 @@ class AndroidLlamaOfflineEngine implements AskMeEngine {
         }
       }
       if (answerText.isEmpty) {
-        throw StateError('The local model returned an empty response.');
+        answerText = docSections.isNotEmpty
+            ? 'This information is not found in the document.'
+            : 'I could not generate an answer offline. Please try rephrasing.';
       }
       return AskMeAnswer(text: answerText, sources: usedSources);
     } finally {
