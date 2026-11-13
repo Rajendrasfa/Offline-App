@@ -63,6 +63,17 @@ class DocumentQueryResolver {
     'document', 'doc', 'file', 'page', 'scan', 'bare', 'baare',
   };
 
+  static const Set<String> _documentInquiryKeywords = {
+    'company', 'website', 'site', 'url', 'address', 'pata', 'name', 'naam',
+    'date', 'tarikh', 'dinank', 'year', 'saal', 'time', 'samay', 'amount',
+    'total', 'bill', 'consumer', 'meter', 'reading', 'payment', 'paid', 'due',
+    'number', 'no', 'id', 'phone', 'mobile', 'email', 'contact', 'sampark',
+    'details', 'detail', 'summary', 'content', 'text', 'likha', 'kiska',
+    'kiski', 'kiske', 'kisne', 'invoice', 'receipt', 'certificate',
+    'document', 'doc', 'file', 'page', 'scan', 'report',
+    'organisation', 'organization', 'office', 'headquarters', 'branch',
+  };
+
   static ResolvedDocuments resolve({
     required String question,
     required List<SavedDocument> savedDocuments,
@@ -108,24 +119,16 @@ class DocumentQueryResolver {
       );
     }
 
-    // Step C: When in Auto mode with saved documents present, include the most
-    // recent document(s) (up to 2 docs, <= 20000 chars total) so semantic questions
-    // like "what is company name", "website address", "kiske baare me hai",
-    // "phone number kya hai" are answered directly from the document rather than
-    // giving generic textbook definitions.
-    if (savedDocuments.isNotEmpty) {
-      final candidates = savedDocuments.take(2).toList();
-      final totalLen = candidates.fold<int>(
-        0,
-        (sum, d) => sum + d.extractedText.length,
+    // Step C: If there is only 1 document in the vault and the user asks a document-related
+    // question (e.g. "what is company name", "website address"), target that document.
+    final terms = _extractTerms(trimmed);
+    final hasInquiryIntent = terms.any(_documentInquiryKeywords.contains);
+    if (savedDocuments.length == 1 && hasInquiryIntent) {
+      return ResolvedDocuments(
+        documents: [savedDocuments.first],
+        reason: DocumentMatchReason.byRelevance,
+        cleanedQuestion: trimmed,
       );
-      if (totalLen <= 20000) {
-        return ResolvedDocuments(
-          documents: candidates,
-          reason: DocumentMatchReason.byRelevance,
-          cleanedQuestion: trimmed,
-        );
-      }
     }
 
     // Step D: Unrelated to saved docs -> Gemini/ChatGPT style general response.
@@ -204,6 +207,9 @@ class DocumentQueryResolver {
       return const [];
     }
 
+    final hasWebsiteIntent = terms.any((t) => t == 'website' || t == 'site' || t == 'url' || t == 'link');
+    final hasCompanyIntent = terms.any((t) => t == 'company' || t == 'org' || t == 'organization' || t == 'firm' || t == 'business');
+
     final minHitsRequired = (terms.length / 2).ceil();
     final scored = <({SavedDocument doc, int score})>[];
 
@@ -216,6 +222,27 @@ class DocumentQueryResolver {
           hits++;
         }
       }
+
+      if (hasWebsiteIntent &&
+          (haystack.contains('www.') ||
+              haystack.contains('.com') ||
+              haystack.contains('http') ||
+              haystack.contains('.in') ||
+              haystack.contains('.org'))) {
+        hits += 2;
+      }
+      if (hasCompanyIntent &&
+          (haystack.contains('pvt') ||
+              haystack.contains('ltd') ||
+              haystack.contains('inc') ||
+              haystack.contains('corp') ||
+              haystack.contains('group') ||
+              haystack.contains('technologies') ||
+              haystack.contains('sfa') ||
+              haystack.contains('the sfa'))) {
+        hits += 2;
+      }
+
       if (hits >= minHitsRequired) {
         scored.add((doc: doc, score: hits));
       }

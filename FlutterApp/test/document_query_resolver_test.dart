@@ -110,4 +110,32 @@ void main() {
     expect(resolved.reason, DocumentMatchReason.pinned);
     expect(resolved.documents.map((d) => d.id), ['doc-2']);
   });
+
+  test('Auto mode matches single scanned document for company name or website query', () {
+    final singleScan = [
+      SavedDocument(
+        id: 'scan-1',
+        name: 'Scan 13-11 10:35',
+        originalFileName: 'scan_20261113_1035.jpg',
+        sourceType: 'scan',
+        extractedText:
+            'Sta\nCMMI-3 DEVY IVAT\nThe SFA\nA Special 10th Anniversary Edition\nwww.sfatechgroup.com\nYears 2015-2025',
+        createdAt: DateTime(2026, 11, 13),
+      ),
+    ];
+
+    final resolvedWebsite = DocumentQueryResolver.resolve(
+      question: 'company website address',
+      savedDocuments: singleScan,
+      mode: AskScopeMode.auto,
+    );
+    expect(resolvedWebsite.documents.map((d) => d.id), ['scan-1']);
+
+    final resolvedCompany = DocumentQueryResolver.resolve(
+      question: 'what is company name',
+      savedDocuments: singleScan,
+      mode: AskScopeMode.auto,
+    );
+    expect(resolvedCompany.documents.map((d) => d.id), ['scan-1']);
+  });
 }
